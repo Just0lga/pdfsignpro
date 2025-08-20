@@ -1,0 +1,16 @@
+build/
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+*.iml
+.gradle/
+local.properties
+.idea/
+*.apk
+*.aab
+*.ipa
+.metadata
+.gitignore
+.git/

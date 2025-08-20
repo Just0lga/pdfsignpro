@@ -1,0 +1,60 @@
+name: pdfsignpro
+description: "This app design for signing pdf easily."
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  #base
+  file_picker: ^10.2.2
+  printing: ^5.14.2
+  signature: ^6.3.0
+  syncfusion_flutter_pdf: ^30.2.4
+  intl: ^0.19.0
+  #for fun
+  google_fonts: ^6.2.1
+  loading_animation_widget: ^1.2.1
+  charset_converter: ^2.1.1
+  #riverpod
+  flutter_riverpod: ^2.5.1
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  ftpconnect: ^2.0.5
+  http: ^1.5.0
+  wave: ^0.2.2
+  json_serializable: ^6.9.5
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  shared_preferences: ^2.5.3
+  connectivity_plus: ^5.0.2
+
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  riverpod_generator: ^2.3.3
+  build_runner: ^2.4.8
+  flutter_launcher_icons: ^0.14.4  
+  freezed: ^2.5.2
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/sample.pdf
+    - assets/logo.png
+    - assets/logo_rectangle.png
+
