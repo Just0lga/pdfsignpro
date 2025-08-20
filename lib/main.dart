@@ -16,7 +16,7 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false, //gite yüklüyorum
+      debugShowCheckedModeBanner: false, //git deneemesiiiiiiiiiii
       title: 'PDF İmza',
       theme: ThemeData(primarySwatch: Colors.cyan),
       home: Consumer(
