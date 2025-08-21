@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfsignpro/services/preference_service.dart';
@@ -7,21 +8,21 @@ import '../models/backend_models/full_response.dart';
 import '../models/backend_models/perm.dart';
 
 class AuthService {
-  static const String baseUrl = "http://192.168.2.77:9090"; // Test API URL'iniz
+  static const String baseUrl = "http://84.51.13.196:9092"; // Port düzeltildi
 
-  // 🔒 Cache'de saklanan son başarılı giriş bilgileri
+  // Cache'de saklanan son başarılı giriş bilgileri
   static const String _lastSuccessfulUsernameKey = 'last_successful_username';
   static const String _lastSuccessfulPasswordHashKey =
       'last_successful_password_hash';
 
   static Future<FullResponse?> login({
     required String username,
-    required String
-        password, // 🔥 Bu artık işlenmiş şifre geliyor (rawPassword + "pdfSignPro2024!@")
+    required String password, // İşlenmiş şifre geliyor
     bool useCache = true,
+    bool isAutoLogin = false,
   }) async {
-    // 🔥 ÇÖZÜM: Gelen şifre zaten işlenmiş, sadece SHA256 hash yapılacak
-    final bytes = utf8.encode(password); // string -> byte
+    // Gelen şifre zaten işlenmiş, sadece SHA256 hash yapılacak
+    final bytes = utf8.encode(password);
     final hash = sha256.convert(bytes).toString();
 
     print('🔑 İşlenmiş şifre: $password');
@@ -45,6 +46,11 @@ class AuthService {
       print('🔗 API isteği: $uri');
       print('📦 Body: $body');
 
+      // Düzeltilmiş timeout - AutoLogin için daha uzun
+      final timeoutDuration = isAutoLogin
+          ? Duration(seconds: 8) // AutoLogin için uzun timeout
+          : Duration(seconds: 10); // Manuel login için orta timeout
+
       final response = await http
           .post(
             uri,
@@ -54,41 +60,81 @@ class AuthService {
             },
             body: body,
           )
-          .timeout(Duration(seconds: 10));
+          .timeout(timeoutDuration);
 
       print('📡 Response Status: ${response.statusCode}');
-      print('📄 Response Body: ${response.body}');
+
+      // Response body'yi log et ama sadece başlangıç kısmını
+      final responseBodyPreview = response.body.length > 500
+          ? '${response.body.substring(0, 500)}...'
+          : response.body;
+      print('📄 Response Body: $responseBodyPreview');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        if (data["success"] == true) {
+        // Başarı kontrolü - perList varsa başarılı sayıyoruz
+        if (data["success"] == true || data["perList"] != null) {
           print(
               '✅ Login başarılı, ${data["perList"]?.length ?? 0} izin bulundu');
 
+          // Port string'i int'e çevir
           if (data["perList"] is List) {
             for (var perm in data["perList"]) {
               if (perm is Map<String, dynamic> && perm["port"] is String) {
-                perm["port"] = int.tryParse(perm["port"]) ?? 21;
+                perm["port"] = int.tryParse(perm["port"]) ?? 9093;
               }
+            }
+          }
+
+          // success field eksikse manuel ekleme
+          if (data["success"] == null && data["perList"] != null) {
+            data["success"] = true;
+          }
+
+          // userId field eksikse manuel ekleme
+          if (data["userId"] == null) {
+            // perList'ten ilk user_id'yi al
+            if (data["perList"] is List && data["perList"].isNotEmpty) {
+              final firstPerm = data["perList"][0];
+              if (firstPerm is Map<String, dynamic> &&
+                  firstPerm["user_id"] != null) {
+                data["userId"] = firstPerm["user_id"];
+              } else {
+                data["userId"] = username; // Fallback
+              }
+            } else {
+              data["userId"] = username; // Fallback
             }
           }
 
           final fullResponse = FullResponse.fromJson(data);
 
-          // 🔥 Başarılı giriş bilgilerini kaydet
+          // Başarılı giriş bilgilerini kaydet
           await _saveSuccessfulLoginCredentials(username, hash);
 
+          // Cache'e kaydet
           await PreferencesService.cacheFullResponse(fullResponse);
-          print('💾 API yanıtı cache\'lendi');
+          print(
+              '💾 API Response cache\'lendi: ${fullResponse.perList.length} izin');
 
           return fullResponse;
         } else {
           throw Exception(data["message"] ?? "Giriş başarısız");
         }
+      } else if (response.statusCode == 401) {
+        throw Exception("Kullanıcı adı veya şifre hatalı");
+      } else if (response.statusCode == 500) {
+        throw Exception("Sunucu hatası");
       } else {
-        throw Exception("Sunucu hatası: ${response.statusCode}");
+        throw Exception("HTTP hatası: ${response.statusCode}");
       }
+    } on SocketException catch (e) {
+      print('❌ Network Error: $e');
+      throw Exception("İnternet bağlantısı hatası");
+    } on HttpException catch (e) {
+      print('❌ HTTP Error: $e');
+      throw Exception("Sunucu bağlantı hatası");
     } catch (e) {
       print('❌ API Error: $e');
 
@@ -105,7 +151,58 @@ class AuthService {
     }
   }
 
-  // 🔥 Başarılı giriş bilgilerini kaydet
+  // RETRY MECHANISM - API bağlantısı için
+  static Future<FullResponse?> loginWithRetry({
+    required String username,
+    required String password,
+    int maxRetries = 3,
+    bool isAutoLogin = false,
+  }) async {
+    Exception? lastException;
+
+    print('LoginWithRetry başladı:');
+    print('  Username: $username');
+    print('  Password uzunluk: ${password.length}');
+    print('  Max retry: $maxRetries');
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('API Deneme $attempt/$maxRetries');
+        // ... mevcut kod devam eder
+
+        final result = await login(
+          username: username,
+          password: password,
+          useCache: false, // Retry'da cache kullanma
+          isAutoLogin: isAutoLogin,
+        );
+
+        if (result != null) {
+          print('✅ API Deneme $attempt başarılı');
+          return result;
+        }
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        print('❌ API Deneme $attempt başarısız: $e');
+
+        if (attempt == maxRetries) {
+          break; // Son deneme, exception'ı fırlat
+        }
+
+        // Deneme arasında bekleme (exponential backoff)
+        await Future.delayed(Duration(seconds: 1));
+      }
+    }
+
+    // Tüm denemeler başarısız
+    if (lastException != null) {
+      throw lastException;
+    }
+
+    return null;
+  }
+
+  // Başarılı giriş bilgilerini kaydet
   static Future<void> _saveSuccessfulLoginCredentials(
       String username, String passwordHash) async {
     try {
@@ -118,7 +215,7 @@ class AuthService {
     }
   }
 
-  // 🔥 Cache'den login deneme - GELİŞTİRİLMİŞ
+  // Cache'den login deneme - Geliştirilmiş
   static Future<FullResponse?> _tryLoginWithCache(
       String username, String passwordHash) async {
     try {
@@ -129,7 +226,7 @@ class AuthService {
         return null;
       }
 
-      // 🔥 Kullanıcı bilgilerini kontrol et
+      // Kullanıcı bilgilerini kontrol et
       final prefs = await SharedPreferences.getInstance();
       final lastUsername = prefs.getString(_lastSuccessfulUsernameKey);
       final lastPasswordHash = prefs.getString(_lastSuccessfulPasswordHashKey);
@@ -139,7 +236,7 @@ class AuthService {
       print('   Cache\'deki username: "$lastUsername"');
       print('   Password hash eşleşiyor: ${passwordHash == lastPasswordHash}');
 
-      // 🔥 Username ve password hash kontrol et
+      // Username ve password hash kontrol et
       if (lastUsername != username) {
         print('❌ Username eşleşmiyor - cache girişi reddedildi');
         return null;
@@ -150,7 +247,7 @@ class AuthService {
         return null;
       }
 
-      // 🔥 Bilgiler eşleşiyorsa cache'den response al
+      // Bilgiler eşleşiyorsa cache'den response al
       final cachedResponse = await PreferencesService.getCachedFullResponse();
 
       if (cachedResponse != null) {
@@ -217,8 +314,12 @@ class AuthService {
   static Future<bool> refreshCache(String username, String password) async {
     try {
       print('🔄 Cache yenileniyor...');
-      final response =
-          await login(username: username, password: password, useCache: false);
+      final response = await login(
+        username: username,
+        password: password,
+        useCache: false,
+        isAutoLogin: false,
+      );
       return response != null;
     } catch (e) {
       print('❌ Cache yenileme hatası: $e');
@@ -226,7 +327,7 @@ class AuthService {
     }
   }
 
-  // 🔥 Cache temizlerken giriş bilgilerini de temizle
+  // Cache temizlerken giriş bilgilerini de temizle
   static Future<void> clearCacheAndCredentials() async {
     try {
       await PreferencesService.clearCache();
@@ -241,19 +342,20 @@ class AuthService {
     }
   }
 
-  // 🔥 Debug: Cache durumunu detaylı göster
+  // Debug: Cache durumunu detaylı göster
   static Future<void> debugCacheStatus() async {
     try {
       final status = await getCacheStatus();
       final prefs = await SharedPreferences.getInstance();
-      //Hash saklama
       final lastPasswordHash = prefs.getString(_lastSuccessfulPasswordHashKey);
 
       print('🔍 AUTH SERVICE Debug:');
       print('   Cache var: ${status['hasCache']}');
       print('   Credentials var: ${status['hasCredentials']}');
       print('   Son username: ${status['lastUsername']}');
-      print('   Son password hash: ${lastPasswordHash?.substring(0, 10)}...');
+      if (lastPasswordHash != null) {
+        print('   Son password hash: ${lastPasswordHash.substring(0, 10)}...');
+      }
 
       final cachedResponse = await PreferencesService.getCachedFullResponse();
       if (cachedResponse != null) {
@@ -262,6 +364,33 @@ class AuthService {
       }
     } catch (e) {
       print('❌ Debug hatası: $e');
+    }
+  }
+
+  // API bağlantı testi
+  static Future<bool> testConnection() async {
+    try {
+      final uri = Uri.parse("$baseUrl/full/login");
+
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({
+              "username": "test_connection",
+              "passwordHash": "test_hash",
+            }),
+          )
+          .timeout(Duration(seconds: 3));
+
+      // 200-499 arası response gelirse sunucu erişilebilir
+      return response.statusCode >= 200 && response.statusCode < 500;
+    } catch (e) {
+      print('❌ Bağlantı testi başarısız: $e');
+      return false;
     }
   }
 }

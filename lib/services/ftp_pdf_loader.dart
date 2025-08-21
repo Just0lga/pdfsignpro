@@ -20,7 +20,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required this.username,
     required this.password,
     required this.filePath,
-    this.port = 21,
+    this.port = 9093,
   });
 
   @override
@@ -33,7 +33,7 @@ class FtpPdfLoader implements PdfLoaderService {
           user: username,
           pass: password,
           port: port,
-          timeout: 15,
+          timeout: 60,
           showLog: false);
 
       bool connected = await ftpConnect.connect();
@@ -129,7 +129,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required String username,
     required String password,
     String directory = '/',
-    int port = 21,
+    int port = 9093,
   }) async {
     FTPConnect? ftpConnect;
     try {
@@ -137,7 +137,7 @@ class FtpPdfLoader implements PdfLoaderService {
           user: username,
           pass: password,
           port: port,
-          timeout: 8,
+          timeout: 30,
           showLog: false);
 
       bool connected = await ftpConnect.connect();
@@ -226,7 +226,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required String username,
     required String password,
     String directory = '/',
-    int port = 21,
+    int port = 9093,
   }) async {
     FTPConnect? ftpConnect;
     try {
@@ -327,7 +327,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required Uint8List pdfBytes,
     required String fileName,
     String directory = '/',
-    int port = 21,
+    int port = 9093,
     bool overwrite = false,
   }) async {
     FTPConnect? ftpConnect;
@@ -457,7 +457,7 @@ class FtpPdfLoader implements PdfLoaderService {
 
   static Future<bool> _uploadWithRetry(FTPConnect ftpConnect, File localFile,
       String remoteName, int expectedSize) async {
-    const int maxRetries = 3;
+    const int maxRetries = 5;
 
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -466,7 +466,7 @@ class FtpPdfLoader implements PdfLoaderService {
         bool result = await ftpConnect.uploadFileWithRetry(
           localFile,
           pRemoteName: remoteName,
-          pRetryCount: 2,
+          pRetryCount: 5,
         );
 
         if (result) {
@@ -501,7 +501,7 @@ class FtpPdfLoader implements PdfLoaderService {
       }
 
       // Tekrar denemeden önce bekle
-      await Future.delayed(Duration(seconds: attempt));
+      await Future.delayed(Duration(seconds: attempt * 2));
     }
 
     return false;

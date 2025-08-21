@@ -13,7 +13,7 @@ class FtpUploadHelper {
     required Uint8List pdfBytes,
     required String fileName,
     String directory = '/',
-    int port = 21,
+    int port = 9093,
     bool overwrite = false,
   }) async {
     FTPConnect? ftpConnect;
@@ -211,7 +211,7 @@ class FtpUploadHelper {
     required String host,
     required String username,
     required String password,
-    int port = 21,
+    int port = 9093,
   }) async {
     print('🧪 Upload karakter seti testi...');
 
@@ -264,7 +264,7 @@ class FtpUploadHelper {
     required String password,
     required Map<String, Uint8List> files, // fileName -> fileBytes
     String directory = '/',
-    int port = 21,
+    int port = 9093,
     bool overwrite = false,
     Function(String fileName, bool success)? onFileComplete,
   }) async {
@@ -313,7 +313,7 @@ class FtpUploadHelper {
     required Uint8List pdfBytes,
     required String fileName,
     String directory = '/',
-    int port = 21,
+    int port = 9093,
     bool overwrite = false,
     Function(double progress)? onProgress,
   }) async {

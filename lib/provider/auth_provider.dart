@@ -45,45 +45,51 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   // Uygulama başlatıldığında otomatik giriş kontrolü
+  // Uygulama başlatıldığında otomatik giriş kontrolü
   Future<void> _checkAutoLogin() async {
     state = state.copyWith(isCheckingAutoLogin: true);
 
     try {
       final rememberMe = await PreferencesService.getRememberMe();
 
-      if (rememberMe) {
-        print('🔐 Remember Me aktif - otomatik giriş yapılıyor');
+      if (!rememberMe) {
+        print('❌ Remember Me aktif değil - normal login');
+        state = state.copyWith(isCheckingAutoLogin: false);
+        return;
+      }
 
-        // 🔥 BASIT ÇÖZÜM: Remember me varsa direkt giriş yap
-        final cachedResponse = await PreferencesService.getCachedFullResponse();
+      print('🔐 Remember Me aktif - otomatik giriş deneniyor');
 
-        if (cachedResponse != null) {
-          // Cache varsa direkt giriş yap
-          print('✅ Cache\'den ${cachedResponse.perList.length} izin yüklendi');
-          state = state.copyWith(
-            fullResponse: cachedResponse,
-            isLoggedIn: true,
-            isCheckingAutoLogin: false,
-          );
-          print('✅ Cache\'den otomatik giriş başarılı');
-          return;
-        } else {
-          // Cache yoksa da giriş yap (offline mode)
-          print('⚠️ Cache boş - offline modda giriş');
-          state = state.copyWith(
-            fullResponse: null,
-            isLoggedIn: true,
-            isCheckingAutoLogin: false,
-          );
-          print('✅ Offline otomatik giriş başarılı');
-          return;
-        }
+      // Credentials kontrolü
+      final credentials = await PreferencesService.getCredentials();
+      final username = credentials['username'];
+      final rawPassword = credentials['password'];
+
+      if (username == null || rawPassword == null) {
+        print('❌ Credentials eksik - normal login');
+        state = state.copyWith(isCheckingAutoLogin: false);
+        return;
+      }
+
+      // API ile giriş yapmayı dene (cache backup ile)
+      final success = await login(username, rawPassword, isAutoLogin: true);
+
+      // 🔥 BURADA EKSİK OLAN KISIM: Başarılı olursa state'i güncelle
+      if (success) {
+        print(
+            '✅ Otomatik giriş başarılı - kullanıcı ana ekrana yönlendirilecek');
+        // state zaten login metodunda güncellenmiş olmalı
+        // Sadece checking durumunu false yap
+        state = state.copyWith(isCheckingAutoLogin: false);
+      } else {
+        // Otomatik giriş başarısız - normal login ekranına git
+        print('❌ Otomatik giriş başarısız - normal login gerekli');
+        state = state.copyWith(isCheckingAutoLogin: false);
       }
     } catch (e) {
       print('❌ Otomatik giriş hatası: $e');
+      state = state.copyWith(isCheckingAutoLogin: false);
     }
-
-    state = state.copyWith(isCheckingAutoLogin: false);
   }
 
   Future<bool> login(String username, String rawPassword,
@@ -93,19 +99,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     try {
-      // 🔥 Şifre işleme
+      // Şifre işleme
       final processedPassword = rawPassword + "pdfSignPro2024!@";
 
-      // 🔥 ÖNCE API'yi dene
+      // ÖNCE API'yi dene - Retry mechanism ile
       try {
-        final response = await AuthService.login(
+        final response = await AuthService.loginWithRetry(
           username: username,
           password: processedPassword,
-          useCache: false, // Önce fresh API'yi dene
+          maxRetries: isAutoLogin ? 1 : 2, // AutoLogin için daha az retry
+          isAutoLogin: isAutoLogin,
         );
 
         if (response != null) {
-          // ✅ API başarılı - normal giriş
+          // API başarılı - normal giriş
           state = state.copyWith(
             fullResponse: response,
             isLoading: false,
@@ -115,16 +122,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
           // Remember me seçilmişse bilgileri kaydet
           if (rememberMe) {
             await PreferencesService.setRememberMe(true);
-            await PreferencesService.saveCredentials(username, rawPassword);
             print('💾 Remember me aktif edildi');
           }
+          await PreferencesService.saveCredentials(username, rawPassword);
 
           return true;
         }
       } catch (e) {
         print('❌ API hatası: $e');
 
-        // 🔥 API başarısızsa SADECE OTOMATIK GİRİŞTE cache'den dene
+        // API başarısızsa SADECE OTOMATIK GİRİŞTE cache'den dene
         if (isAutoLogin && await PreferencesService.getRememberMe()) {
           print(
               '🔄 Otomatik giriş - API çalışmıyor ama remember me var, cache\'den giriş');
@@ -140,23 +147,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
               isLoading: false,
               isLoggedIn: true,
             );
+            return true;
           } else {
-            print('⚠️ Cache boş - offline modda giriş');
-            state = state.copyWith(
-              fullResponse: null,
-              isLoading: false,
-              isLoggedIn: true,
-            );
+            print('❌ Cache boş - otomatik giriş başarısız');
+            return false; // Cache yoksa başarısız
           }
-
-          return true;
         }
 
-        // 🔥 MANUEL GİRİŞTE API başarısızsa HATA VER
+        // MANUEL GİRİŞTE API başarısızsa HATA VER
         if (!isAutoLogin) {
+          String errorMessage =
+              "API'ye erişilemiyor. İnternet bağlantınızı kontrol edin.";
+
+          if (e.toString().contains("SocketException") ||
+              e.toString().contains("TimeoutException")) {
+            errorMessage =
+                "Sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edin.";
+          } else if (e.toString().contains("401") ||
+              e.toString().contains("403")) {
+            errorMessage = "Kullanıcı adı veya şifre hatalı";
+          } else if (e.toString().contains("500")) {
+            errorMessage = "Sunucu hatası. Lütfen daha sonra tekrar deneyin.";
+          }
+
           state = state.copyWith(
             isLoading: false,
-            error: "Kullanıcı adı veya şifre hatalı",
+            error: errorMessage,
           );
           return false;
         }
@@ -183,7 +199,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       PreferencesService.clearAll();
       print('🗑️ Tüm kullanıcı bilgileri ve cache temizlendi');
     } else {
-      // 🔥 SADECE OTURUM KAPAT - CACHE'İ KORUMA!
+      // SADECE OTURUM KAPAT - CACHE'İ KORUMA!
       // Cache'i ve remember me'yi koru, sadece state'i temizle
       print('📴 Oturum kapatıldı - cache ve remember me korundu');
     }
@@ -203,7 +219,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     };
   }
 
-  // 🔧 Cache'i manuel yenile - SADECE API BAŞARILI OLURSA
+  // Cache'i manuel yenile - SADECE API BAŞARILI OLURSA
   Future<bool> refreshCache() async {
     try {
       print('🔄 Cache yenileme deneniyor - API\'den çekiliyor...');
@@ -213,15 +229,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final rawPassword = credentials['password'];
 
       if (username != null && rawPassword != null) {
-        // 🔧 Şifreyi işle ve AuthService'e gönder
+        // Şifreyi işle ve AuthService'e gönder
         final processedPassword = rawPassword + "pdfSignPro2024!@";
 
-        // 🔧 API'den çekmeyi dene - BAŞARISIZ OLURSA CACHE'İ TEMİZLEME!
+        // API'den çekmeyi dene - BAŞARISIZ OLURSA CACHE'İ TEMİZLEME!
         final response = await AuthService.login(
-            username: username, password: processedPassword, useCache: false);
+            username: username,
+            password: processedPassword,
+            useCache: false,
+            isAutoLogin: false);
 
         if (response != null) {
-          // 🔥 SADECE BAŞARILI OLURSA cache'i güncelle
+          // SADECE BAŞARILI OLURSA cache'i güncelle
           await PreferencesService.clearCache(); // Eski cache'i temizle
           await PreferencesService.cacheFullResponse(
               response); // Yeni cache'i kaydet
@@ -242,67 +261,112 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return false;
   }
 
-  // 🆕 Manuel full refresh - SADECE API BAŞARILI OLURSA TEMİZLE
+  // Manuel full refresh - SADECE API BAŞARILI OLURSA TEMİZLE
   Future<bool> forceFullRefresh() async {
     try {
-      print('🔥 FULL REFRESH başlıyor - API deneniyor...');
+      print('FULL REFRESH başlıyor...');
 
       final credentials = await PreferencesService.getCredentials();
       final username = credentials['username'];
       final rawPassword = credentials['password'];
 
-      if (username != null && rawPassword != null) {
-        // State'i loading yap
-        state = state.copyWith(isLoading: true);
+      print('Refresh için credentials:');
+      print('  Username: ${username ?? "NULL"}');
+      print('  Raw Password uzunluk: ${rawPassword?.length ?? 0}');
 
-        // 🔧 Şifreyi işle ve AuthService'e gönder
-        final processedPassword = rawPassword + "pdfSignPro2024!@";
+      if (username == null || rawPassword == null) {
+        print('Refresh için credentials eksik');
+        state = state.copyWith(isLoading: false);
+        return false;
+      }
 
-        // API'den yeni veri almaya çalış
-        final response = await AuthService.login(
-          username: username,
-          password: processedPassword,
-          useCache: false,
+      // Loading state
+      state = state.copyWith(isLoading: true, clearError: true);
+
+      // Şifreyi işle
+      final processedPassword = rawPassword + "pdfSignPro2024!@";
+      print(
+          'Şifre işlendi: ${rawPassword} -> ${processedPassword.length} karakter');
+
+      // API çağrısı - TIMEOUT İLE
+      print('Retry ile API çağrısı yapılıyor...');
+      final response = await AuthService.loginWithRetry(
+        username: username,
+        password: processedPassword,
+        maxRetries: 3,
+        isAutoLogin: false,
+      ).timeout(
+        Duration(seconds: 25), // loginWithRetry için timeout
+        onTimeout: () {
+          print('API çağrısı timeout');
+          return null;
+        },
+      );
+
+      if (response != null) {
+        print('API başarılı - ${response.perList.length} izin alındı');
+
+        // Cache güncelle
+        await PreferencesService.clearCache();
+        await PreferencesService.cacheFullResponse(response);
+
+        // State güncelle
+        state = state.copyWith(
+          fullResponse: response,
+          isLoading: false,
+          clearError: true,
         );
 
-        if (response != null) {
-          // 🔥 SADECE BAŞARILI OLURSA eski cache'i temizle
-          await PreferencesService.clearCache();
-          await PreferencesService.cacheFullResponse(response);
+        return true;
+      } else {
+        print('API null response döndü');
 
-          state = state.copyWith(
-            fullResponse: response,
-            isLoading: false,
-          );
-
-          print('✅ Full refresh tamamlandı - yeni veri alındı');
-          return true;
-        } else {
-          // API başarısız - eski cache'i koru
-          final cachedResponse =
-              await PreferencesService.getCachedFullResponse();
+        // Fallback cache
+        final cachedResponse = await PreferencesService.getCachedFullResponse();
+        if (cachedResponse != null) {
+          print(
+              'Fallback cache yüklendi - ${cachedResponse.perList.length} izin');
           state = state.copyWith(
             fullResponse: cachedResponse,
             isLoading: false,
+            error: 'API erişilemez - cache kullanılıyor',
           );
-          print('❌ API başarısız - eski cache korundu');
-          return false;
+        } else {
+          state = state.copyWith(
+            isLoading: false,
+            error: 'API erişilemez ve cache yok',
+          );
         }
-      } else {
-        state = state.copyWith(isLoading: false);
+        return false;
       }
     } catch (e) {
-      print('❌ Full refresh hatası: $e - eski cache korundu');
+      print('Full refresh hatası: $e');
 
-      // Hata durumunda eski cache'i yükle
-      final cachedResponse = await PreferencesService.getCachedFullResponse();
-      state = state.copyWith(
-        fullResponse: cachedResponse,
-        isLoading: false,
-      );
+      // Emergency fallback
+      try {
+        final cachedResponse = await PreferencesService.getCachedFullResponse();
+        if (cachedResponse != null) {
+          print('Emergency cache yüklendi');
+          state = state.copyWith(
+            fullResponse: cachedResponse,
+            isLoading: false,
+            error: 'Ağ hatası - cache kullanılıyor',
+          );
+        } else {
+          state = state.copyWith(
+            isLoading: false,
+            error: 'Tamamen başarısız - cache de yok',
+          );
+        }
+      } catch (cacheError) {
+        print('Emergency cache de başarısız: $cacheError');
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Tam başarısızlık',
+        );
+      }
+      return false;
     }
-
-    return false;
   }
 
   // FTP izinlerini al

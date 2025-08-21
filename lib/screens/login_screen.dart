@@ -28,8 +28,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     super.initState();
 
     // 🔥 Test değerleri kaldırıldı - boş başlıyor
-    // usernameController.text = 'test';
-    // passwordController.text = 'test';
+    usernameController.text = 'test';
+    passwordController.text = 'test';
 
     // Kayıtlı remember me durumunu yükle
     _loadRememberMeState();
@@ -87,9 +87,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     super.dispose();
   }
 
+  // LoginScreen - Düzeltilmiş login metodunda
+
   Future<void> login() async {
     final username = usernameController.text.trim();
-    final rawPassword = passwordController.text.trim(); // 🔥 RAW şifre
+    final rawPassword = passwordController.text.trim();
 
     if (username.isEmpty || rawPassword.isEmpty) {
       _showCustomSnackBar("Lütfen tüm alanları doldurun", Colors.orange);
@@ -98,43 +100,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     final authNotifier = ref.read(authProvider.notifier);
 
-    // 🔥 ÇÖZÜM: AuthProvider'a RAW şifreyi gönder
-    // AuthProvider içinde işleme yapılacak
-    final success = await authNotifier.login(
-        username, rawPassword, // 🔥 RAW şifre gönderiliyor
-        rememberMe: rememberMe);
+    // ✅ MANUEL GİRİŞ - API zorunlu
+    print('🔐 Manuel giriş başlatılıyor: $username');
 
-    // Widget hala mounted mı kontrol et
+    final success = await authNotifier.login(
+      username,
+      rawPassword,
+      rememberMe: rememberMe,
+      isAutoLogin: false, // ✅ Manuel giriş
+    );
+
     if (!mounted) return;
 
     if (success) {
-      // FTP izinlerini kontrol et
       final validFtpPermissions = authNotifier.getFtpPermissions();
-      final allPermissions = authNotifier.state.fullResponse?.perList ?? [];
+      final authState = ref.read(authProvider);
 
       // Cache durumunu kontrol et
       final cacheStatus = await authNotifier.getCacheStatus();
 
-      print('🎯 Login Debug Bilgileri:');
-      print('   Toplam izin sayısı: ${allPermissions.length}');
-      print('   Geçerli FTP izin sayısı: ${validFtpPermissions.length}');
-      print('   Cache durumu: $cacheStatus');
-
-      for (var perm in allPermissions) {
-        print('   İzin: ${perm.name} (${perm.permtype}) - AP: ${perm.ap}');
-        if (perm.permtype == 'ftp') {
-          print('     Host: ${perm.host}, User: ${perm.uname}');
-        }
+      // ✅ Login kaynak bilgisi
+      String loginSource = 'API\'den giriş yapıldı';
+      if (cacheStatus['hasCache'] == true && validFtpPermissions.isEmpty) {
+        loginSource = 'Cache\'den giriş yapıldı (API erişilemedi)';
       }
 
-      // Cache'den mi geldi bilgisini göster
-      String loginSource = cacheStatus['hasCache'] == true
-          ? 'Cache\'den giriş yapıldı'
-          : 'API\'den giriş yapıldı';
+      print('🎯 Login başarılı:');
+      print('   Geçerli FTP izin sayısı: ${validFtpPermissions.length}');
+      print('   Kaynak: $loginSource');
 
       _showCustomSnackBar(
-          "Giriş başarılı! ${validFtpPermissions.length} geçerli FTP izni bulundu.\n$loginSource",
-          Colors.green);
+        "Giriş başarılı! ${validFtpPermissions.length} FTP izni bulundu.\n$loginSource",
+        Colors.green,
+      );
 
       await Future.delayed(Duration(milliseconds: 800));
 
@@ -146,7 +144,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
     } else {
       final authState = ref.read(authProvider);
-      _showCustomSnackBar(authState.error ?? "Giriş başarısız", Colors.red);
+
+      // ✅ Daha açıklayıcı hata mesajları
+      String errorMessage = authState.error ?? "Giriş başarısız";
+
+      if (errorMessage.contains("API'ye erişilemiyor")) {
+        errorMessage =
+            "Sunucuya bağlanılamıyor.\nİnternet bağlantınızı kontrol edin.";
+      } else if (errorMessage.contains("Kullanıcı adı veya şifre")) {
+        errorMessage =
+            "Kullanıcı adı veya şifre hatalı.\nLütfen bilgilerinizi kontrol edin.";
+      }
+
+      _showCustomSnackBar(errorMessage, Colors.red);
     }
   }
 
@@ -444,7 +454,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                     ),
                   ),
-
                   SizedBox(height: height * 0.05),
                 ],
               ),

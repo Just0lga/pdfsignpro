@@ -18,10 +18,10 @@ class FtpBrowserScreen extends ConsumerStatefulWidget {
 }
 
 class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
-  final String _host = '192.168.2.108';
-  final String _username = 'tolga';
-  final String _password = '1234';
-  final int _port = 21;
+  final String _host = '84.51.13.196';
+  final String _username = 'testuser';
+  final String _password = 'testpass';
+  final int _port = 9093;
   final String _directory = '/';
 
   bool _isLoading = false;
@@ -133,10 +133,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       await _connectAndListWithCache();
     } catch (e) {
       print('❌ Genel bağlantı hatası: $e');
-      setState(() {
-        _lastError = 'Bağlantı hatası: ${e.toString()}';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _lastError = 'Bağlantı hatası: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
     }
   }
 

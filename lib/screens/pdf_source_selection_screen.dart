@@ -6,6 +6,7 @@ import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
 import 'package:pdfsignpro/services/local_pdf_loader.dart';
 import 'package:pdfsignpro/services/asset_pdf_loader.dart';
+import 'package:pdfsignpro/services/preference_service.dart';
 import '../models/backend_models/perm.dart';
 
 class PdfSourceSelectionScreen extends ConsumerStatefulWidget {
@@ -17,34 +18,95 @@ class PdfSourceSelectionScreen extends ConsumerStatefulWidget {
 class _PdfSourceSelectionScreenState
     extends ConsumerState<PdfSourceSelectionScreen> {
   bool _isRefreshing = false;
+  bool _hasPerformedInitialCheck = false; // ✅ Ekledik
 
   @override
   void initState() {
     super.initState();
-    // Sayfa her açıldığında API kontrolü yap
+    // ✅ SADECE İLK AÇILIŞTA kontrol yap - her açılışta değil
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _performApiCheck();
+      _performInitialCheck();
     });
   }
 
-  /// 🆕 Sayfa açıldığında otomatik API kontrolü
-  Future<void> _performApiCheck() async {
-    if (_isRefreshing) return;
+  /// ✅ İlk açılışta sadece veri var mı kontrol et - API çağırma
+  Future<void> _performInitialCheck() async {
+    if (_hasPerformedInitialCheck) return;
 
+    _hasPerformedInitialCheck = true;
+
+    final authState = ref.read(authProvider);
+
+    // Eğer zaten veri varsa API çağırma
+    if (authState.fullResponse != null &&
+        authState.fullResponse!.perList.isNotEmpty) {
+      print('✅ Mevcut veriler kullanılıyor - API çağrısı yapmıyoruz');
+
+      final ftpCount = authState.fullResponse!.perList
+          .where((p) => p.permtype == 'ftp' && p.ap == 1)
+          .length;
+      final localCount = authState.fullResponse!.perList
+          .where((p) => p.type == 'local' && p.ap == 1)
+          .length;
+      final assetCount = authState.fullResponse!.perList
+          .where((p) => p.type == 'asset' && p.ap == 1)
+          .length;
+
+      _showApiMessage(
+          'Mevcut server listesi\n$ftpCount FTP, $localCount Local, $assetCount Asset server',
+          Colors.blue,
+          Icons.info);
+      return;
+    }
+
+    // Veri yoksa kontrol et ama çok agresif olma
+    print('⚠️ Veri yok - hafif kontrol yapılıyor');
+  }
+
+  /// ✅ Manuel yenileme - sadece kullanıcı istediğinde
+  Future<void> _performManualRefresh() async {
+    if (_isRefreshing) {
+      print('Refresh zaten devam ediyor, atlanıyor...');
+      return;
+    }
+
+    print('Manuel yenileme başlatıldı');
     setState(() {
       _isRefreshing = true;
     });
 
     try {
-      print('🔄 PDF Kaynak seçim sayfası - API kontrolü başlıyor...');
+      // Credential kontrolü
+      final credentials = await PreferencesService.getCredentials();
+      final username = credentials['username'];
+      final rawPassword = credentials['password'];
 
+      print('Credential kontrol:');
+      print('  Username: ${username != null ? "Mevcut" : "Eksik"}');
+      print('  Password: ${rawPassword != null ? "Mevcut" : "Eksik"}');
+
+      if (username == null || rawPassword == null) {
+        print('Credentials eksik - yenileme yapılamıyor');
+        _showApiMessage('Giriş bilgileri bulunamadı - Tekrar giriş yapın',
+            Colors.red, Icons.error);
+        return;
+      }
+
+      print('forceFullRefresh başlatılıyor...');
       final authNotifier = ref.read(authProvider.notifier);
-      final success = await authNotifier.forceFullRefresh();
+
+      // DÜZELTME: timeout() doğru kullanımı
+      final success = await authNotifier.forceFullRefresh().timeout(
+        Duration(seconds: 15),
+        onTimeout: () {
+          print('15 saniye timeout');
+          return false;
+        },
+      );
+
+      print('Yenileme sonucu: ${success ? "BAŞARILI" : "BAŞARISIZ"}');
 
       if (success) {
-        print('✅ API başarılı - server listesi güncellendi');
-
-        // Güncel server sayısını göster
         final currentState = ref.read(authProvider);
         if (currentState.fullResponse != null) {
           final ftpCount = currentState.fullResponse!.perList
@@ -57,23 +119,27 @@ class _PdfSourceSelectionScreenState
               .where((p) => p.type == 'asset' && p.ap == 1)
               .length;
 
-          print(
-              '📊 Güncel server sayıları: $ftpCount FTP, $localCount Local, $assetCount Asset');
-
           _showApiMessage(
               'Server listesi güncellendi\n$ftpCount FTP, $localCount Local, $assetCount Asset server',
               Colors.green,
               Icons.cloud_done);
         }
       } else {
-        print('❌ API başarısız - cache\'deki veriler korundu');
         _showApiMessage('Offline mod - Kaydedilmiş server listesi gösteriliyor',
             Colors.orange, Icons.cloud_off);
       }
     } catch (e) {
-      print('❌ API kontrol hatası: $e');
-      _showApiMessage('Bağlantı hatası - Kaydedilmiş veriler gösteriliyor',
-          Colors.red, Icons.error_outline);
+      print('Yenileme hatası: $e');
+
+      String errorMessage =
+          'Bağlantı hatası - Kaydedilmiş veriler gösteriliyor';
+      if (e.toString().contains('TimeoutException')) {
+        errorMessage = 'Sunucu yanıt vermiyor - Zaman aşımı';
+      } else if (e.toString().contains('SocketException')) {
+        errorMessage = 'İnternet bağlantısı yok';
+      }
+
+      _showApiMessage(errorMessage, Colors.red, Icons.error_outline);
     } finally {
       if (mounted) {
         setState(() {
@@ -142,15 +208,14 @@ class _PdfSourceSelectionScreenState
 
     return RefreshIndicator(
       color: Color(0xFF112b66),
-      onRefresh: _performApiCheck, // Pull-to-refresh ile de API kontrolü
+      onRefresh: _performManualRefresh, // ✅ Sadece manuel yenileme
       child: SingleChildScrollView(
-        physics:
-            AlwaysScrollableScrollPhysics(), // RefreshIndicator için gerekli
+        physics: AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🆕 API durum göstergesi
+            // API durum göstergesi
             if (_isRefreshing) ...[
               Container(
                 padding: EdgeInsets.all(12),
@@ -257,7 +322,6 @@ class _PdfSourceSelectionScreenState
               ),
             ],
 
-            // Alt boşluk (RefreshIndicator için)
             SizedBox(height: 100),
           ],
         ),
@@ -306,10 +370,10 @@ class _PdfSourceSelectionScreenState
           ),
         ),
         Spacer(),
-        // 🆕 Yenileme butonu
+        // ✅ Yenileme butonu - sadece kullanıcı isterse
         if (!_isRefreshing)
           IconButton(
-            onPressed: _performApiCheck,
+            onPressed: _performManualRefresh, // ✅ Manuel yenileme
             icon: Icon(Icons.refresh, color: Color(0xFF112b66)),
             tooltip: 'Server listesini yenile',
           ),
@@ -317,6 +381,7 @@ class _PdfSourceSelectionScreenState
     );
   }
 
+  // Diğer widget metodları aynı kalıyor...
   Widget _buildFtpServerCard(
       BuildContext context, WidgetRef ref, Perm ftpPerm) {
     final bool isConfigured =
@@ -572,11 +637,9 @@ class _PdfSourceSelectionScreenState
 
     print('🔄 Local PDF loading başlatılıyor...');
 
-    // PDF loading'i başlat
     notifier.loadPdf(LocalPdfLoader()).then((_) {
       print('✅ Local PDF loading tamamlandı');
 
-      // Success mesajı göster
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -614,11 +677,9 @@ class _PdfSourceSelectionScreenState
 
     print('🔄 Asset PDF loading başlatılıyor...');
 
-    // PDF loading'i başlat
     notifier.loadPdf(AssetPdfLoader('assets/sample.pdf')).then((_) {
       print('✅ Asset PDF loading tamamlandı');
 
-      // Success mesajı göster
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -664,14 +725,11 @@ class _PdfSourceSelectionScreenState
           ),
           TextButton(
             onPressed: () {
-              // Auth state'i temizle
               ref.read(authProvider.notifier).logout();
-              // PDF state'i temizle
               ref.read(pdfProvider.notifier).reset();
-              // FTP seçimini temizle
               ref.read(selectedFtpConnectionProvider.notifier).state = null;
 
-              Navigator.pop(context); // Dialog'u kapat
+              Navigator.pop(context);
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
