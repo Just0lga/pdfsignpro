@@ -123,7 +123,7 @@ class FtpPdfLoader implements PdfLoaderService {
     return File('${tempDir.path}/$fileName');
   }
 
-  /// PDF dosyalarını listele - iyileştirilmiş boyut alma ile
+  /// ✅ Geliştirilmiş PDF dosyalarını listele - detaylı debug ile
   static Future<List<FtpFile>> listPdfFiles({
     required String host,
     required String username,
@@ -133,29 +133,61 @@ class FtpPdfLoader implements PdfLoaderService {
   }) async {
     FTPConnect? ftpConnect;
     try {
+      print('🔗 FTP PDF listesi başlatılıyor...');
+      print('   Host: $host:$port');
+      print('   Username: $username');
+      print('   Directory: $directory');
+
       ftpConnect = FTPConnect(host,
           user: username,
           pass: password,
           port: port,
           timeout: 30,
-          showLog: false);
+          showLog: true); // ✅ Debug için true
 
+      print('🔄 FTP connect çağrılıyor...');
       bool connected = await ftpConnect.connect();
-      if (!connected) throw Exception('FTP bağlantısı kurulamadı');
+      print('📡 FTP connect sonucu: $connected');
 
-      if (directory != '/') await ftpConnect.changeDirectory(directory);
+      if (!connected) {
+        throw Exception('FTP bağlantısı kurulamadı - connect() false döndü');
+      }
+
+      print('🔧 Transfer modu ve dizin ayarları...');
+      if (directory != '/') {
+        print('📁 Dizin değiştiriliyor: $directory');
+        await ftpConnect.changeDirectory(directory);
+      }
+
       await ftpConnect.setTransferType(TransferType.binary);
 
+      print('📋 Dizin içeriği listeleniyor...');
       List<FTPEntry> entries = await ftpConnect.listDirectoryContent();
-      print('🔍 FTP\'den ${entries.length} dosya bulundu');
+      print('📦 Toplam ${entries.length} dosya/klasör bulundu');
+
+      // ✅ Tüm entries'leri detaylı log
+      if (entries.isEmpty) {
+        print('⚠️ Dizin boş veya listelenemiyor!');
+        return [];
+      }
+
+      for (int i = 0; i < entries.length; i++) {
+        FTPEntry entry = entries[i];
+        print(
+            '   [$i] ${_entryTypeToString(entry.type)} - "${entry.name}" (${entry.size} bytes) ${entry.modifyTime}');
+      }
 
       List<FtpFile> pdfFiles = [];
+      int pdfCount = 0;
+      int skippedCount = 0;
 
       for (FTPEntry entry in entries) {
         if (entry.type == FTPEntryType.FILE &&
             entry.name.toLowerCase().endsWith('.pdf')) {
-          print('\n📄 İşlenen PDF: "${entry.name}"');
+          pdfCount++;
+          print('\n📄 PDF #$pdfCount işleniyor: "${entry.name}"');
           print('   Entry size: ${entry.size}');
+          print('   Entry modifyTime: ${entry.modifyTime}');
 
           // Decode edilmiş dosya adı
           String decodedName =
@@ -167,56 +199,108 @@ class FtpPdfLoader implements PdfLoaderService {
           // Orijinal path (indirme için kullanılacak)
           String originalPath =
               directory == '/' ? '/${entry.name}' : '$directory/${entry.name}';
+          print('   📍 Path: $originalPath');
 
-          // Boyut alma - önce entry'den, hata durumunda gelişmiş yöntemler
+          // Boyut alma - geliştirilmiş yöntemle
           int fileSize = FtpFileSizeHelper.getSafeSize(entry);
+          print('   📏 Entry\'den boyut: $fileSize');
 
           if (fileSize <= 0) {
             print(
                 '   🔍 Entry\'de geçerli boyut yok, gelişmiş yöntem deneniyor...');
-            fileSize = await FtpFileSizeHelper.getFileSize(
-                ftpConnect, entry.name, directory);
-
-            if (fileSize <= 0) {
-              print('   ⚠️ Boyut alınamadı, dosya atlanıyor: ${entry.name}');
-              continue;
+            try {
+              fileSize = await FtpFileSizeHelper.getFileSize(
+                  ftpConnect, entry.name, directory);
+              print('   📏 Gelişmiş yöntemle boyut: $fileSize');
+            } catch (e) {
+              print('   ❌ Boyut alma hatası: $e');
+              fileSize = 0;
             }
-            print('   ✅ Gelişmiş yöntemle boyut alındı: $fileSize bytes');
-          } else {
-            print('   ✅ Entry\'den boyut alındı: $fileSize bytes');
           }
 
-          pdfFiles.add(FtpFile(
+          if (fileSize <= 0) {
+            print('   ⚠️ Boyut 0 veya negatif, dosya atlanıyor: ${entry.name}');
+            skippedCount++;
+            continue;
+          }
+
+          // FtpFile oluştur
+          FtpFile ftpFile = FtpFile(
             name: decodedName, // UI'da decode edilmiş ad göster
             path: originalPath, // İndirme için orijinal path kullan
             size: fileSize,
             modifyTime: entry.modifyTime,
-          ));
+          );
 
+          pdfFiles.add(ftpFile);
           print(
               '   ✅ PDF eklendi: "$decodedName" (${FtpFileSizeHelper.formatFileSize(fileSize)})');
         }
       }
 
-      print('\n🎯 Toplam PDF sayısı: ${pdfFiles.length}');
+      print('\n🎯 PDF Listeleme Özeti:');
+      print('   Toplam dosya/klasör: ${entries.length}');
+      print('   PDF dosya sayısı: $pdfCount');
+      print('   Başarıyla eklenen: ${pdfFiles.length}');
+      print('   Atlanan (boyut sorunu): $skippedCount');
 
-      // Boyutu 0 olan dosyalar varsa uyar
-      int zeroSizeFiles = pdfFiles.where((f) => f.size == 0).length;
-      if (zeroSizeFiles > 0) {
-        print(
-            '⚠️  UYARI: ${zeroSizeFiles} adet dosyanın boyutu 0 byte olarak algılandı');
+      if (pdfFiles.isEmpty && entries.isNotEmpty) {
+        print('⚠️ UYARI: Dosyalar var ama hiç PDF bulunamadı!');
+        // PDF olmayan dosyaları göster
+        final nonPdfFiles = entries
+            .where((e) =>
+                e.type == FTPEntryType.FILE &&
+                !e.name.toLowerCase().endsWith('.pdf'))
+            .toList();
+        if (nonPdfFiles.isNotEmpty) {
+          print('   PDF olmayan dosyalar:');
+          for (var file in nonPdfFiles.take(5)) {
+            print('     - ${file.name}');
+          }
+        }
       }
 
       return pdfFiles;
-    } catch (e) {
-      print('💥 FTP hatası: $e');
-      throw Exception('Dosya listesi alınamadı: $e');
+    } catch (e, stackTrace) {
+      print('💥 FTP listPdfFiles KRITIK HATA:');
+      print('   Hata türü: ${e.runtimeType}');
+      print('   Hata mesajı: $e');
+      print('   Stack trace: $stackTrace');
+
+      // Özel hata türlerine göre daha açıklayıcı mesajlar
+      if (e.toString().contains('SocketException')) {
+        throw Exception('FTP sunucuya bağlanılamıyor - Ağ hatası: $e');
+      } else if (e.toString().contains('TimeoutException')) {
+        throw Exception('FTP bağlantısı zaman aşımına uğradı: $e');
+      } else if (e.toString().contains('Authentication')) {
+        throw Exception('FTP kimlik doğrulama hatası: $e');
+      } else {
+        throw Exception('FTP dosya listesi alınamadı: $e');
+      }
     } finally {
       try {
-        await ftpConnect?.disconnect();
+        if (ftpConnect != null) {
+          print('🔌 FTP bağlantısı kapatılıyor...');
+          await ftpConnect.disconnect();
+          print('✅ FTP bağlantısı kapatıldı');
+        }
       } catch (e) {
-        print('FTP bağlantı kesme hatası: $e');
+        print('❌ FTP disconnect hatası: $e');
       }
+    }
+  }
+
+  /// ✅ Helper: FTPEntryType'ı string'e çevir
+  static String _entryTypeToString(FTPEntryType type) {
+    switch (type) {
+      case FTPEntryType.FILE:
+        return 'FILE';
+      case FTPEntryType.DIR:
+        return 'DIR';
+      case FTPEntryType.LINK:
+        return 'LINK';
+      default:
+        return 'UNKNOWN';
     }
   }
 
@@ -230,13 +314,15 @@ class FtpPdfLoader implements PdfLoaderService {
   }) async {
     FTPConnect? ftpConnect;
     try {
+      print('🔗 FTP tüm dosya listesi başlatılıyor...');
+
       ftpConnect = FTPConnect(
         host,
         user: username,
         pass: password,
         port: port,
-        timeout: 8,
-        showLog: false,
+        timeout: 30,
+        showLog: true, // ✅ Debug için true
       );
 
       bool connected = await ftpConnect.connect();
@@ -253,6 +339,8 @@ class FtpPdfLoader implements PdfLoaderService {
       List<FTPEntry> entries = await ftpConnect.listDirectoryContent();
       List<FtpFile> allFiles = [];
 
+      print('📦 Toplam ${entries.length} item bulundu');
+
       for (FTPEntry entry in entries) {
         if (entry.type == FTPEntryType.FILE) {
           String fullPath =
@@ -266,8 +354,13 @@ class FtpPdfLoader implements PdfLoaderService {
           int fileSize = FtpFileSizeHelper.getSafeSize(entry);
 
           if (fileSize <= 0) {
-            fileSize = await FtpFileSizeHelper.getFileSize(
-                ftpConnect, entry.name, directory);
+            try {
+              fileSize = await FtpFileSizeHelper.getFileSize(
+                  ftpConnect, entry.name, directory);
+            } catch (e) {
+              print('Boyut alma hatası (${entry.name}): $e');
+              fileSize = 0;
+            }
           }
 
           allFiles.add(FtpFile(
@@ -279,9 +372,11 @@ class FtpPdfLoader implements PdfLoaderService {
         }
       }
 
+      print('✅ Toplam ${allFiles.length} dosya listelendi');
       return allFiles;
-    } catch (e) {
-      print('FTP tüm dosya listeleme hatası: $e');
+    } catch (e, stackTrace) {
+      print('❌ FTP tüm dosya listeleme hatası: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('Dosya listesi alınamadı: $e');
     } finally {
       try {
@@ -317,7 +412,6 @@ class FtpPdfLoader implements PdfLoaderService {
       return false;
     }
   }
-  // Mevcut FtpPdfLoader sınıfına bu metodu ekleyin
 
   /// PDF yükleme - FtpUploadHelper kullanarak
   static Future<bool> uploadPdfToFtp({

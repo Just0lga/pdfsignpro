@@ -8,9 +8,6 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/frontend_models/ftp_file.dart';
 import '../services/ftp_pdf_loader.dart';
-import '../services/cache_manager.dart';
-// FTP Provider kullanmak isterseniz bu import'u açın:
-// import '../provider/ftp_provider.dart';
 
 class FtpBrowserScreen extends ConsumerStatefulWidget {
   @override
@@ -29,10 +26,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   String? _lastError;
   bool _hasInternetConnection = true;
 
+  // ✅ Future'ı state variable olarak saklayalım
+  Future<List<FtpFile>>? _ftpFilesFuture;
+
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnectionAndList();
     });
@@ -96,41 +95,41 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     }
   }
 
-  // Geliştirilmiş bağlantı kontrol ve listeleme
+  // ✅ Yeniden düzenlenmiş ana bağlantı kontrolü
   Future<void> _checkConnectionAndList() async {
     if (_isLoading) return;
 
     setState(() {
       _isLoading = true;
       _lastError = null;
+      _ftpFilesFuture = null; // Eski future'ı temizle
     });
 
     try {
       print('🔍 Bağlantı kontrolü başlıyor...');
 
-      // Cache debug bilgisi
-      await _debugCacheStatus();
-
       // 1. İnternet bağlantısını kontrol et
       bool hasInternet = await _checkInternetConnection();
       if (!hasInternet) {
-        // İnternet yoksa cache'den dene
-        await _loadFromCacheIfAvailable();
-        setState(() => _isLoading = false);
+        setState(() {
+          _lastError = 'İnternet bağlantısı yok';
+          _isLoading = false;
+        });
         return;
       }
 
       // 2. FTP sunucu bağlantısını kontrol et
       bool ftpReachable = await _checkFtpServerConnection();
       if (!ftpReachable) {
-        // FTP sunucu erişilemezse cache'den dene
-        await _loadFromCacheIfAvailable();
-        setState(() => _isLoading = false);
+        setState(() {
+          _lastError = 'FTP sunucuya bağlanılamıyor';
+          _isLoading = false;
+        });
         return;
       }
 
-      // 3. Bağlantı başarılıysa FTP işlemlerini başlat
-      await _connectAndListWithCache();
+      // 3. FTP dosya listesini yükle
+      await _loadFtpFiles();
     } catch (e) {
       print('❌ Genel bağlantı hatası: $e');
       if (mounted) {
@@ -142,69 +141,87 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     }
   }
 
-  // Cache durumunu debug et
-  Future<void> _debugCacheStatus() async {
-    await CacheManager.debugCacheInfo();
-  }
-
-  // Cache'den yüklemeyi dene
-  Future<void> _loadFromCacheIfAvailable() async {
-    print('📦 Cache\'den veri yüklemeye çalışılıyor...');
+  // ✅ FTP dosyalarını yükle
+  Future<void> _loadFtpFiles() async {
     try {
-      final cachedFiles = await CacheManager.getCachedFtpFiles();
-      if (cachedFiles != null && cachedFiles.isNotEmpty) {
-        print('✅ Cache\'den ${cachedFiles.length} dosya yüklendi');
-        setState(() {
-          _lastError =
-              'Offline - Cache\'den gösteriliyor (${cachedFiles.length} dosya)';
-        });
-        // Cache'deki dosyalar otomatik olarak FutureBuilder tarafından gösterilecek
-      } else {
-        print('📦 Cache boş veya süresi dolmuş');
-        setState(() {
-          _lastError = 'Bağlantı yok ve cache\'de veri bulunmuyor';
-        });
-      }
-    } catch (e) {
-      print('❌ Cache\'den yükleme hatası: $e');
+      print('🔄 FTP dosya listesi yükleniyor...');
+
+      // Future'ı oluştur ve state'e kaydet
+      _ftpFilesFuture = _showAllFiles
+          ? FtpPdfLoader.listAllFiles(
+              host: _host,
+              username: _username,
+              password: _password,
+              directory: _directory,
+              port: _port,
+            )
+          : FtpPdfLoader.listPdfFiles(
+              host: _host,
+              username: _username,
+              password: _password,
+              directory: _directory,
+              port: _port,
+            );
+
+      // Future'ı test edelim
+      final files = await _ftpFilesFuture!;
+      print('✅ FTP dosya listesi yüklendi: ${files.length} dosya');
+
       setState(() {
-        _lastError = 'Cache hatası: ${e.toString()}';
+        _isLoading = false;
+        _lastError = null;
+      });
+    } catch (e, stackTrace) {
+      print('❌ FTP dosya yükleme hatası: $e');
+      print('Stack trace: $stackTrace');
+
+      setState(() {
+        _lastError = 'FTP dosya listesi alınamadı: ${e.toString()}';
+        _ftpFilesFuture = null;
+        _isLoading = false;
       });
     }
   }
 
-  // Cache ile FTP bağlantısı
-  Future<void> _connectAndListWithCache() async {
-    setState(() => _isLoading = true);
+  // ✅ Test metodu
+  Future<void> _testFtpConnection() async {
+    print('🧪 FTP TEST BAŞLIYOR...');
 
     try {
-      print('🔄 Cache yenileme kontrol ediliyor...');
+      final files = await FtpPdfLoader.listPdfFiles(
+        host: _host,
+        username: _username,
+        password: _password,
+        directory: _directory,
+        port: _port,
+      );
 
-      // Önce cache'den yükle (hızlı gösterim için)
-      final cachedFiles = await CacheManager.getCachedFtpFiles();
-      if (cachedFiles != null) {
-        print('📦 Cache\'den ${cachedFiles.length} dosya önceden yüklendi');
+      print('✅ TEST BAŞARILI: ${files.length} dosya bulundu');
+      for (var file in files) {
+        print('   - ${file.name} (${file.sizeFormatted})');
       }
 
-      // Cache yenileme gerekli mi kontrol et
-      final shouldRefresh = await CacheManager.shouldRefreshCache('ftp');
-
-      if (shouldRefresh) {
-        print('🔄 FTP\'den yeni veri çekiliyor...');
-        // FutureBuilder yeni veri çekecek ve cache güncellenecek
-      } else {
-        print('✅ Cache güncel, yenileme gerekmiyor');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Test başarılı: ${files.length} dosya bulundu'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
+    } catch (e, stackTrace) {
+      print('❌ TEST BAŞARISIZ:');
+      print('   Hata: $e');
+      print('   Stack: $stackTrace');
 
-      // Manuel refresh için setState çağırıyoruz
-      setState(() {});
-    } catch (e) {
-      print('❌ Cache FTP hatası: $e');
-      setState(() {
-        _lastError = 'FTP yapılandırma hatası: ${e.toString()}';
-      });
-    } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Test başarısız: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -299,42 +316,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         backgroundColor: Color(0xFF112b66),
         centerTitle: true,
         actions: [
-          // Cache temizleme butonu
-          /*
+          // Test butonu
           IconButton(
-            icon: const Icon(Icons.clear_all),
-            onPressed: () async {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Cache Temizle'),
-                  content:
-                      Text('Tüm cache verilerini temizlemek istiyor musunuz?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('İptal'),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        await CacheManager.clearAllCache();
-                        _checkConnectionAndList();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Cache temizlendi'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      },
-                      child: Text('Temizle'),
-                    ),
-                  ],
-                ),
-              );
-            },
-            tooltip: 'Cache Temizle',
-          ),*/
+            icon: Icon(Icons.bug_report, color: Colors.white),
+            onPressed: _testFtpConnection,
+            tooltip: 'FTP Test',
+          ),
           IconButton(
             icon: Icon(Icons.refresh, color: Colors.white),
             onPressed: _isLoading ? null : _checkConnectionAndList,
@@ -421,28 +408,50 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
   }
 
+  // ✅ Yeniden düzenlenmiş dosya listesi
   Widget _buildFileList() {
     // Bağlantı yoksa hata göster
     if (!_hasInternetConnection) {
       return _buildConnectionError();
     }
 
-    return FutureBuilder<List<FtpFile>>(
-      future: _showAllFiles
-          ? FtpPdfLoader.listAllFiles(
-              host: _host,
-              username: _username,
-              password: _password,
-              directory: _directory,
-              port: _port,
-            )
-          : FtpPdfLoader.listPdfFiles(
-              host: _host,
-              username: _username,
-              password: _password,
-              directory: _directory,
-              port: _port,
+    // Loading durumu
+    if (_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF112b66)),
+            SizedBox(height: 16),
+            Text('FTP sunucuya bağlanılıyor...'),
+          ],
+        ),
+      );
+    }
+
+    // Future henüz oluşturulmamış
+    if (_ftpFilesFuture == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.dns, size: 48, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('FTP bağlantısı hazırlanıyor...'),
+            SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _checkConnectionAndList,
+              icon: Icon(Icons.refresh),
+              label: Text('Bağlan'),
             ),
+          ],
+        ),
+      );
+    }
+
+    // FutureBuilder ile dosya listesi
+    return FutureBuilder<List<FtpFile>>(
+      future: _ftpFilesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -451,13 +460,19 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               children: [
                 CircularProgressIndicator(color: Color(0xFF112b66)),
                 SizedBox(height: 16),
-                Text('FTP sunucuya bağlanılıyor...'),
+                Text('FTP sunucudan dosyalar alınıyor...'),
+                SizedBox(height: 8),
+                Text(
+                  'Sunucu: $_host:$_port',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
           );
         }
 
         if (snapshot.hasError) {
+          print('❌ FTP Future hatası: ${snapshot.error}');
           return _buildFtpError(snapshot.error.toString());
         }
 
@@ -475,16 +490,21 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                     ? 'Hiç dosya bulunamadı'
                     : 'PDF dosyası bulunamadı'),
                 const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: _checkConnectionAndList,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Yenile'),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: _uploadTestPdf,
-                  icon: const Icon(Icons.upload),
-                  label: const Text('Test PDF Yükle'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _checkConnectionAndList,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Yenile'),
+                    ),
+                    SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _uploadTestPdf,
+                      icon: const Icon(Icons.upload),
+                      label: const Text('Test PDF'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -617,6 +637,16 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               style: TextStyle(color: Colors.grey[600], fontSize: 14),
             ),
           ),
+          const SizedBox(height: 8),
+          // Hata detayı (debug için)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              error.length > 100 ? error.substring(0, 100) + '...' : error,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -632,49 +662,22 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                   backgroundColor: Color(0xFF112b66),
                   foregroundColor: Colors.white,
                 ),
-              ), /*
+              ),
               SizedBox(width: 16),
               ElevatedButton.icon(
-                onPressed: _uploadTestPdf,
-                icon: const Icon(Icons.upload),
-                label: const Text('Test PDF'),
+                onPressed: _testFtpConnection,
+                icon: const Icon(Icons.bug_report),
+                label: const Text('Test'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   foregroundColor: Colors.white,
                 ),
-              ),*/
+              ),
             ],
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _connectAndList() async {
-    setState(() => _isLoading = true);
-
-    try {
-      // FTP provider'ı güncelle (opsiyonel)
-      // Eğer provider kullanıyorsanız import'u ekleyin: import '../provider/ftp_provider.dart';
-      // ref.read(ftpConfigProvider.notifier).state = FtpConfig(
-      //   host: _host,
-      //   username: _username,
-      //   password: _password,
-      //   directory: _directory,
-      //   port: _port,
-      // );
-      // ref.invalidate(ftpFilesProvider);
-
-      // Manuel refresh için setState çağırıyoruz
-      setState(() {});
-    } catch (e) {
-      print('FTP config hatası: $e');
-      setState(() {
-        _lastError = 'FTP yapılandırma hatası: ${e.toString()}';
-      });
-    } finally {
-      setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _uploadTestPdf() async {
