@@ -246,6 +246,7 @@ class AuthService {
     try {
       final status = await getCacheStatus();
       final prefs = await SharedPreferences.getInstance();
+      //Hash saklama
       final lastPasswordHash = prefs.getString(_lastSuccessfulPasswordHashKey);
 
       print('🔍 AUTH SERVICE Debug:');
