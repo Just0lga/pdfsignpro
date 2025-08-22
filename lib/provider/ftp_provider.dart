@@ -20,26 +20,6 @@ final allFtpPermissionsProvider = Provider<List<Perm>>((ref) {
       .toList();
 });
 
-// Lokal izinleri provider
-final localPermissionsProvider = Provider<List<Perm>>((ref) {
-  final authState = ref.watch(authProvider);
-  if (authState.fullResponse == null) return [];
-
-  return authState.fullResponse!.perList
-      .where((perm) => perm.type == 'local' && perm.ap == 1)
-      .toList();
-});
-
-// Asset izinleri provider
-final assetPermissionsProvider = Provider<List<Perm>>((ref) {
-  final authState = ref.watch(authProvider);
-  if (authState.fullResponse == null) return [];
-
-  return authState.fullResponse!.perList
-      .where((perm) => perm.type == 'asset' && perm.ap == 1)
-      .toList();
-});
-
 // Sadece dolu FTP izinleri - eski provider
 final ftpPermissionsProvider = Provider<List<Perm>>((ref) {
   final authState = ref.watch(authProvider);

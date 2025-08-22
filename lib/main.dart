@@ -6,12 +6,14 @@ import 'package:pdfsignpro/provider/auth_provider.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
 import 'screens/pdf_imza_screen.dart';
 
+//SVN
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('tr_TR', null); // Türkçe tarih formatı için
   runApp(ProviderScope(child: MyApp()));
 }
 
+//ok
 class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,8 +27,9 @@ class MyApp extends ConsumerWidget {
         textSelectionTheme: TextSelectionThemeData(
           cursorColor: Color(0xFF112b66),
           selectionColor: Color(0xFF112b66).withOpacity(0.3),
-          selectionHandleColor:
-              Color(0xFF112b66), // Bu damla şeklindeki handle'ı değiştirir
+          selectionHandleColor: Color(
+            0xFF112b66,
+          ), // Bu damla şeklindeki handle'ı değiştirir
         ),
       ),
       home: Consumer(
