@@ -182,6 +182,7 @@ class PdfImzaScreen extends ConsumerWidget {
   void _showSignatureDialog(
       BuildContext context, WidgetRef ref, int pageIndex, int signatureIndex) {
     showDialog(
+      barrierDismissible: false,
       context: context,
       builder: (context) => SignatureDialog(
         pageIndex: pageIndex,
@@ -351,6 +352,7 @@ class PdfImzaScreen extends ConsumerWidget {
       // Eğer dosya varsa kullanıcıya sor
       if (fileExists && context.mounted) {
         shouldOverwrite = await showDialog<bool>(
+              barrierDismissible: false,
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text('Dosya Mevcut'),

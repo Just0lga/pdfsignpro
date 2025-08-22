@@ -24,6 +24,7 @@ class _PdfSourceSelectionScreenState
 
   @override
   void initState() {
+    print("XXX pdf_source_selection_screen.dart");
     super.initState();
     // ✅ SADECE İLK AÇILIŞTA kontrol yap - her açılışta değil
     WidgetsBinding.instance.addPostFrameCallback((_) {

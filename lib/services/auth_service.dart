@@ -15,6 +15,7 @@ class AuthService {
   static const String _lastSuccessfulPasswordHashKey =
       'last_successful_password_hash';
 
+  //✅ Klasik login bu
   static Future<FullResponse?> login({
     required String username,
     required String password, // İşlenmiş şifre geliyor
@@ -82,7 +83,7 @@ class AuthService {
           if (data["perList"] is List) {
             for (var perm in data["perList"]) {
               if (perm is Map<String, dynamic> && perm["port"] is String) {
-                perm["port"] = int.tryParse(perm["port"]) ?? 9093;
+                perm["port"] = int.tryParse(perm["port"]) ?? 21;
               }
             }
           }
@@ -151,7 +152,7 @@ class AuthService {
     }
   }
 
-  // RETRY MECHANISM - API bağlantısı için
+  //✅ Login retry: Eğer ilk deneme başarısız olursa tekrar deniyor
   static Future<FullResponse?> loginWithRetry({
     required String username,
     required String password,
@@ -202,7 +203,7 @@ class AuthService {
     return null;
   }
 
-  // Başarılı giriş bilgilerini kaydet
+  //✅ Login gerçekleştiyse username ve hashli passwordu tutuyor
   static Future<void> _saveSuccessfulLoginCredentials(
       String username, String passwordHash) async {
     try {
@@ -215,7 +216,7 @@ class AuthService {
     }
   }
 
-  // Cache'den login deneme - Geliştirilmiş
+  //✅ Apiye erişilemediği durumda cacheden gelen bilgilerle login denemesi yapar
   static Future<FullResponse?> _tryLoginWithCache(
       String username, String passwordHash) async {
     try {
@@ -268,7 +269,7 @@ class AuthService {
     return null;
   }
 
-  /// FTP izinlerini filtrele
+  //✅ Tüm ftp izinleri
   static List<Perm> getFtpPermissions(FullResponse response) {
     return response.perList
         .where((perm) =>
@@ -283,11 +284,13 @@ class AuthService {
         .toList();
   }
 
+  //😡 Silinebilir sanırım ilk izni dönüyor
   static Perm? getFirstValidFtpPermission(FullResponse response) {
     final ftpPerms = getFtpPermissions(response);
     return ftpPerms.isNotEmpty ? ftpPerms.first : null;
   }
 
+  //✅ Silinemez, isimle ftp sunucusunu buluyor
   static Perm? getFtpPermissionByName(FullResponse response, String name) {
     return getFtpPermissions(response).cast<Perm?>().firstWhere(
           (perm) => perm?.name == name,
@@ -295,6 +298,7 @@ class AuthService {
         );
   }
 
+  //✅ Silinemez, cachete veri var mı kontrol eder, son giriş yapan kullanıcının bilgisini döner
   static Future<Map<String, dynamic>> getCacheStatus() async {
     final hasCache = await PreferencesService.hasCache();
 
@@ -311,6 +315,7 @@ class AuthService {
     };
   }
 
+  //✅ Silinemez, cache yenilemek için var
   static Future<bool> refreshCache(String username, String password) async {
     try {
       print('🔄 Cache yenileniyor...');
@@ -327,7 +332,7 @@ class AuthService {
     }
   }
 
-  // Cache temizlerken giriş bilgilerini de temizle
+  //✅ Silinemez, cache temizlerken giriş bilgilerini de temizliyor
   static Future<void> clearCacheAndCredentials() async {
     try {
       await PreferencesService.clearCache();
@@ -342,7 +347,7 @@ class AuthService {
     }
   }
 
-  // Debug: Cache durumunu detaylı göster
+  //✅ Silinemez, cache durumunu konsola yazdırır, tester için gerekli bir fonksiyon
   static Future<void> debugCacheStatus() async {
     try {
       final status = await getCacheStatus();
@@ -367,7 +372,7 @@ class AuthService {
     }
   }
 
-  // API bağlantı testi
+  //✅ Silinemez, yarın bir gün test için kullanılabilir
   static Future<bool> testConnection() async {
     try {
       final uri = Uri.parse("$baseUrl/full/login");

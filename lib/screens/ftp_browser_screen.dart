@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import 'package:intl/intl.dart';
@@ -10,17 +11,13 @@ import '../models/frontend_models/ftp_file.dart';
 import '../services/ftp_pdf_loader.dart';
 
 class FtpBrowserScreen extends ConsumerStatefulWidget {
+  const FtpBrowserScreen({Key? key}) : super(key: key);
+
   @override
   ConsumerState<FtpBrowserScreen> createState() => _FtpBrowserScreenState();
 }
 
 class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
-  final String _host = '84.51.13.196';
-  final String _username = 'testuser';
-  final String _password = 'testpass';
-  final int _port = 9093;
-  final String _directory = '/';
-
   bool _isLoading = false;
   bool _showAllFiles = false;
   String? _lastError;
@@ -31,6 +28,8 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   @override
   void initState() {
+    print("XXX pftp_browser_screen.dart");
+
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnectionAndList();
@@ -76,11 +75,15 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   // FTP sunucuya özel ping kontrolü
   Future<bool> _checkFtpServerConnection() async {
-    try {
-      print('🔌 FTP sunucu bağlantısı kontrol ediliyor: $_host:$_port');
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
 
-      final socket =
-          await Socket.connect(_host, _port, timeout: Duration(seconds: 10));
+    try {
+      print(
+          '🔌 FTP sunucu bağlantısı kontrol ediliyor: ${selectedFtpConnection?.host}:${selectedFtpConnection?.port}');
+
+      final socket = await Socket.connect(
+          selectedFtpConnection?.host, selectedFtpConnection?.port ?? 21,
+          timeout: Duration(seconds: 10));
       await socket.close();
 
       print('✅ FTP sunucuya bağlantı başarılı');
@@ -89,7 +92,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       print('❌ FTP sunucu bağlantı hatası: $e');
       setState(() {
         _lastError =
-            'FTP sunucuya bağlanılamıyor: $_host:$_port\nHata: ${e.toString()}';
+            'FTP sunucuya bağlanılamıyor: ${selectedFtpConnection?.host}:${selectedFtpConnection?.port}\nHata: ${e.toString()}';
       });
       return false;
     }
@@ -143,24 +146,26 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   // ✅ FTP dosyalarını yükle
   Future<void> _loadFtpFiles() async {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
     try {
       print('🔄 FTP dosya listesi yükleniyor...');
 
       // Future'ı oluştur ve state'e kaydet
       _ftpFilesFuture = _showAllFiles
           ? FtpPdfLoader.listAllFiles(
-              host: _host,
-              username: _username,
-              password: _password,
-              directory: _directory,
-              port: _port,
+              host: selectedFtpConnection?.host ?? "",
+              username: selectedFtpConnection?.uname ?? "",
+              password: selectedFtpConnection?.pass ?? "",
+              directory: "/",
+              port: selectedFtpConnection?.port ?? 21,
             )
           : FtpPdfLoader.listPdfFiles(
-              host: _host,
-              username: _username,
-              password: _password,
-              directory: _directory,
-              port: _port,
+              host: selectedFtpConnection?.host ?? "",
+              username: selectedFtpConnection?.uname ?? "",
+              password: selectedFtpConnection?.pass ?? "",
+              directory: "/",
+              port: selectedFtpConnection?.port ?? 21,
             );
 
       // Future'ı test edelim
@@ -186,14 +191,15 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   // ✅ Test metodu
   Future<void> _testFtpConnection() async {
     print('🧪 FTP TEST BAŞLIYOR...');
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
 
     try {
       final files = await FtpPdfLoader.listPdfFiles(
-        host: _host,
-        username: _username,
-        password: _password,
-        directory: _directory,
-        port: _port,
+        host: selectedFtpConnection?.host ?? "",
+        username: selectedFtpConnection?.uname ?? "",
+        password: selectedFtpConnection?.pass ?? "",
+        directory: "/",
+        port: selectedFtpConnection?.port ?? 21,
       );
 
       print('✅ TEST BAŞARILI: ${files.length} dosya bulundu');
@@ -350,6 +356,8 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   }
 
   Widget _buildConnectionInfo() {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
     return Container(
       color: Color(0xFF112b66).withOpacity(0.1),
       padding: const EdgeInsets.all(12),
@@ -360,7 +368,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               const Icon(Icons.person, size: 20),
               const SizedBox(width: 4),
               Text(
-                'Kullanıcı: $_username',
+                'Kullanıcı: ${selectedFtpConnection?.uname}',
                 style: const TextStyle(fontSize: 13),
               ),
             ],
@@ -410,6 +418,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   // ✅ Yeniden düzenlenmiş dosya listesi
   Widget _buildFileList() {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
     // Bağlantı yoksa hata göster
     if (!_hasInternetConnection) {
       return _buildConnectionError();
@@ -463,7 +472,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                 Text('FTP sunucudan dosyalar alınıyor...'),
                 SizedBox(height: 8),
                 Text(
-                  'Sunucu: $_host:$_port',
+                  'Sunucu: ${selectedFtpConnection?.host}:${selectedFtpConnection?.port}',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -681,6 +690,8 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   }
 
   Future<void> _uploadTestPdf() async {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
     try {
       final testPdfBytes = await _createTestPdf();
       final fileName = 'test_${DateTime.now().millisecondsSinceEpoch}.pdf';
@@ -700,12 +711,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       );
 
       final success = await FtpPdfLoader.uploadPdfToFtp(
-        host: _host,
-        username: _username,
-        password: _password,
-        pdfBytes: testPdfBytes,
-        fileName: fileName,
-      );
+          host: selectedFtpConnection?.host ?? "",
+          username: selectedFtpConnection?.uname ?? "",
+          password: selectedFtpConnection?.pass ?? "",
+          pdfBytes: testPdfBytes,
+          fileName: fileName,
+          port: selectedFtpConnection?.port ?? 21);
 
       if (context.mounted) {
         Navigator.pop(context);
@@ -753,6 +764,8 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   }
 
   Future<void> _downloadAndOpenPdf(FtpFile file) async {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -783,11 +796,11 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
     try {
       final loader = FtpPdfLoader(
-        host: _host,
-        username: _username,
-        password: _password,
+        host: selectedFtpConnection?.host ?? "",
+        username: selectedFtpConnection?.uname ?? "",
+        password: selectedFtpConnection?.pass ?? "",
         filePath: file.path,
-        port: _port,
+        port: selectedFtpConnection?.port ?? 21,
       );
 
       await ref.read(pdfProvider.notifier).loadPdf(

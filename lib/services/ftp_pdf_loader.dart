@@ -20,7 +20,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required this.username,
     required this.password,
     required this.filePath,
-    this.port = 9093,
+    required this.port,
   });
 
   @override
@@ -129,7 +129,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required String username,
     required String password,
     String directory = '/',
-    int port = 9093,
+    required int port,
   }) async {
     FTPConnect? ftpConnect;
     try {
@@ -310,7 +310,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required String username,
     required String password,
     String directory = '/',
-    int port = 9093,
+    required int port,
   }) async {
     FTPConnect? ftpConnect;
     try {
@@ -421,7 +421,7 @@ class FtpPdfLoader implements PdfLoaderService {
     required Uint8List pdfBytes,
     required String fileName,
     String directory = '/',
-    int port = 9093,
+    required int port,
     bool overwrite = false,
   }) async {
     FTPConnect? ftpConnect;
@@ -511,7 +511,6 @@ class FtpPdfLoader implements PdfLoaderService {
   }
 
   // Yardımcı metodlar
-
   static Future<File> _createTempFileForUpload(Uint8List bytes) async {
     final tempDir = Directory.systemTemp;
     final fileName = 'ftp_upload_${DateTime.now().millisecondsSinceEpoch}.pdf';

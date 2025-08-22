@@ -44,7 +44,7 @@ final ftpFilesProvider = FutureProvider<List<FtpFile>>((ref) async {
       username: selectedConnection.uname!,
       password: selectedConnection.pass!,
       directory: '/',
-      port: selectedConnection.port ?? 9093,
+      port: selectedConnection.port ?? 21,
     );
   } catch (e) {
     print('FTP dosya listesi hatası: $e');
@@ -124,11 +124,11 @@ class FtpConnectionDetails {
 
   // Port'u güvenli şekilde int'e çevir
   static int _parsePort(dynamic portValue) {
-    if (portValue == null) return 9093;
+    if (portValue == null) return 21;
     if (portValue is int) return portValue;
     if (portValue is String) {
-      return int.tryParse(portValue) ?? 9093;
+      return int.tryParse(portValue) ?? 21;
     }
-    return 9093;
+    return 21;
   }
 }
