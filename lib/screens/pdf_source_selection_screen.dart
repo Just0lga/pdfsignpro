@@ -6,6 +6,7 @@ import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/local_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
+import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
 import 'package:pdfsignpro/services/local_pdf_loader.dart';
 import 'package:pdfsignpro/services/asset_pdf_loader.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
@@ -20,19 +21,17 @@ class PdfSourceSelectionScreen extends ConsumerStatefulWidget {
 class _PdfSourceSelectionScreenState
     extends ConsumerState<PdfSourceSelectionScreen> {
   bool _isRefreshing = false;
-  bool _hasPerformedInitialCheck = false; // ✅ Ekledik
+  bool _hasPerformedInitialCheck = false;
 
   @override
   void initState() {
     print("XXX pdf_source_selection_screen.dart");
     super.initState();
-    // ✅ SADECE İLK AÇILIŞTA kontrol yap - her açılışta değil
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _performInitialCheck();
     });
   }
 
-  /// ✅ İlk açılışta sadece veri var mı kontrol et - API çağırma
   Future<void> _performInitialCheck() async {
     if (_hasPerformedInitialCheck) return;
 
@@ -40,7 +39,6 @@ class _PdfSourceSelectionScreenState
 
     final authState = ref.read(authProvider);
 
-    // Eğer zaten veri varsa API çağırma
     if (authState.fullResponse != null &&
         authState.fullResponse!.perList.isNotEmpty) {
       print('✅ Mevcut veriler kullanılıyor - API çağrısı yapmıyoruz');
@@ -62,11 +60,9 @@ class _PdfSourceSelectionScreenState
       return;
     }
 
-    // Veri yoksa kontrol et ama çok agresif olma
     print('⚠️ Veri yok - hafif kontrol yapılıyor');
   }
 
-  /// ✅ Manuel yenileme - sadece kullanıcı istediğinde
   Future<void> _performManualRefresh() async {
     if (_isRefreshing) {
       print('Refresh zaten devam ediyor, atlanıyor...');
@@ -79,7 +75,6 @@ class _PdfSourceSelectionScreenState
     });
 
     try {
-      // Credential kontrolü
       final credentials = await PreferencesService.getCredentials();
       final username = credentials['username'];
       final rawPassword = credentials['password'];
@@ -98,7 +93,6 @@ class _PdfSourceSelectionScreenState
       print('forceFullRefresh başlatılıyor...');
       final authNotifier = ref.read(authProvider.notifier);
 
-      // DÜZELTME: timeout() doğru kullanımı
       final success = await authNotifier.forceFullRefresh().timeout(
         Duration(seconds: 15),
         onTimeout: () {
@@ -182,36 +176,61 @@ class _PdfSourceSelectionScreenState
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
-    if (authState.fullResponse == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red),
-            SizedBox(height: 16),
-            Text('İzin bilgisi bulunamadı'),
-            SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => _logout(context, ref),
-              icon: Icon(Icons.logout),
-              label: Text('Çıkış Yap'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: Text(
+          'PDF Kaynağı Seçin',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-      );
-    }
+        backgroundColor: Color(0xFF112b66),
+        iconTheme: IconThemeData(color: Colors.white),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => _logout(context, ref),
+            tooltip: 'Çıkış Yap',
+          ),
+        ],
+      ),
+      body: authState.fullResponse == null
+          ? _buildErrorState(context, ref)
+          : _buildContent(),
+    );
+  }
 
+  Widget _buildErrorState(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.red),
+          SizedBox(height: 16),
+          Text('İzin bilgisi bulunamadı'),
+          SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => _logout(context, ref),
+            icon: Icon(Icons.logout),
+            label: Text('Çıkış Yap'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
     final allFtpPermissions = ref.watch(allFtpPermissionsProvider);
     final localPermissions = ref.watch(localPermissionsProvider);
     final assetPermissions = ref.watch(assetPermissionsProvider);
 
     return RefreshIndicator(
       color: Color(0xFF112b66),
-      onRefresh: _performManualRefresh, // ✅ Sadece manuel yenileme
+      onRefresh: _performManualRefresh,
       child: SingleChildScrollView(
         physics: AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.all(16),
@@ -373,10 +392,9 @@ class _PdfSourceSelectionScreenState
           ),
         ),
         Spacer(),
-        // ✅ Yenileme butonu - sadece kullanıcı isterse
         if (!_isRefreshing)
           IconButton(
-            onPressed: _performManualRefresh, // ✅ Manuel yenileme
+            onPressed: _performManualRefresh,
             icon: Icon(Icons.refresh, color: Color(0xFF112b66)),
             tooltip: 'Server listesini yenile',
           ),
@@ -384,7 +402,6 @@ class _PdfSourceSelectionScreenState
     );
   }
 
-  // Diğer widget metodları aynı kalıyor...
   Widget _buildFtpServerCard(
       BuildContext context, WidgetRef ref, Perm ftpPerm) {
     final bool isConfigured =
@@ -644,6 +661,14 @@ class _PdfSourceSelectionScreenState
       print('✅ Local PDF loading tamamlandı');
 
       if (context.mounted) {
+        // PDF imza sayfasına git
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PdfSignScreen(),
+          ),
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -684,6 +709,14 @@ class _PdfSourceSelectionScreenState
       print('✅ Asset PDF loading tamamlandı');
 
       if (context.mounted) {
+        // PDF imza sayfasına git
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PdfSignScreen(),
+          ),
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -718,21 +751,27 @@ class _PdfSourceSelectionScreenState
   void _logout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      barrierDismissible: false, // Dış alana dokunarak kapatmayı engelle
+      barrierDismissible: false,
       builder: (context) => WillPopScope(
-        onWillPop: () async =>
-            true, // Geri tuşuna izin ver - çıkış dialog'u için
+        onWillPop: () async => true,
         child: AlertDialog(
-          title: Text('Çıkış Yap'),
+          title: Text(
+            'Çıkış Yap',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: Text('Uygulamadan çıkmak istediğinizden emin misiniz?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('İptal'),
+              child: Text(
+                'İptal',
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+              ),
             ),
             TextButton(
               onPressed: () {
-                ref.read(authProvider.notifier).logout();
+                ref.read(authProvider.notifier).logout(clearRememberMe: true);
                 ref.read(pdfProvider.notifier).reset();
                 ref.read(selectedFtpConnectionProvider.notifier).state = null;
 
@@ -740,14 +779,15 @@ class _PdfSourceSelectionScreenState
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Başarıyla çıkış yapıldı'),
-                    backgroundColor: Colors.green,
+                    content: Text('Tamamen çıkış yapıldı'),
+                    backgroundColor: Colors.red,
                   ),
                 );
               },
               child: Text(
-                'Çıkış Yap',
-                style: TextStyle(color: Colors.red),
+                'Çıkış',
+                style:
+                    TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
               ),
             ),
           ],

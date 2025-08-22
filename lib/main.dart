@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pdfsignpro/screens/login_screen.dart';
 import 'package:pdfsignpro/provider/auth_provider.dart';
-import 'package:pdfsignpro/services/preference_service.dart';
-import 'screens/pdf_imza_screen.dart';
+import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 
 //SVN
 void main() async {
@@ -43,7 +42,7 @@ class MyApp extends ConsumerWidget {
 
           // Eğer giriş yapılmışsa PDF ekranına git
           if (authState.isLoggedIn) {
-            return PdfImzaScreen();
+            return PdfSourceSelectionScreen();
           }
 
           return LoginScreen();

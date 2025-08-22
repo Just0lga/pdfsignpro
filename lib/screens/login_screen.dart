@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:pdfsignpro/provider/auth_provider.dart';
-import 'package:pdfsignpro/screens/pdf_imza_screen.dart';
+import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
 import 'package:pdfsignpro/widgets/app_text_field.dart';
 
@@ -25,6 +23,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   void initState() {
+    print("xxx login screen");
     super.initState();
 
     // 🔥 Test değerleri kaldırıldı - boş başlıyor
@@ -139,7 +138,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => PdfImzaScreen()),
+          MaterialPageRoute(builder: (context) => PdfSourceSelectionScreen()),
         );
       }
     } else {

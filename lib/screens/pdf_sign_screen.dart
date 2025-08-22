@@ -1,0 +1,357 @@
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdfsignpro/models/frontend_models/pdf_state.dart';
+import 'package:pdfsignpro/provider/auth_provider.dart';
+import 'package:pdfsignpro/provider/pdf_provider.dart';
+import 'package:pdfsignpro/provider/ftp_provider.dart';
+import 'package:printing/printing.dart';
+import '../services/ftp_pdf_loader.dart';
+import '../widgets/pdf_page_widget.dart';
+import '../widgets/signature_dialog.dart';
+
+class PdfSignScreen extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pdfState = ref.watch(pdfProvider);
+    final pdfNotifier = ref.read(pdfProvider.notifier);
+
+    return WillPopScope(
+      onWillPop: () async {
+        // PDF temizle ve geri git
+        pdfNotifier.reset();
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'PDF İmzala',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          backgroundColor: Color(0xFF112b66),
+          iconTheme: IconThemeData(color: Colors.white),
+          centerTitle: true,
+          actions: _buildActions(context, pdfState, pdfNotifier, ref),
+        ),
+        body: _buildBody(context, ref, pdfState, pdfNotifier),
+      ),
+    );
+  }
+
+  List<Widget>? _buildActions(BuildContext context, PdfState state,
+      PdfNotifier notifier, WidgetRef ref) {
+    if (state.isLoading) {
+      return [_buildLoadingIndicator()];
+    }
+
+    return [
+      IconButton(
+        icon: const Icon(Icons.share),
+        onPressed: () => _sharePDF(context, notifier),
+        tooltip: 'Paylaş',
+      ),
+      IconButton(
+        icon: const Icon(Icons.save),
+        onPressed: () => _savePDF(context, notifier, ref),
+        tooltip: 'Kaydet',
+      ),
+    ];
+  }
+
+  Widget _buildBody(BuildContext context, WidgetRef ref, PdfState state,
+      PdfNotifier notifier) {
+    // Loading durumunda spinner göster
+    if (state.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF112b66)),
+            SizedBox(height: 16),
+            Text(
+              'PDF işleniyor...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF112b66),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // PDF yoksa hata göster
+    if (state.pdfBytes == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red),
+            SizedBox(height: 16),
+            Text(
+              'PDF Bulunamadı',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'İmzalanacak PDF dosyası bulunamadı',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: Icon(Icons.arrow_back),
+              label: Text('Geri Dön'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF112b66),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // PDF sayfalarını göster
+    return ListView.builder(
+      itemCount: state.totalPages,
+      shrinkWrap: false,
+      cacheExtent: 1000,
+      addAutomaticKeepAlives: true,
+      addRepaintBoundaries: true,
+      itemBuilder: (context, pageIndex) => PdfPageWidget(
+        key: ValueKey('pdf_page_$pageIndex'),
+        pageIndex: pageIndex,
+        onSignatureTap: (signatureIndex) => _showSignatureDialog(
+          context,
+          ref,
+          pageIndex,
+          signatureIndex,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() => const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF112b66)),
+            ),
+          ),
+        ),
+      );
+
+  void _showSignatureDialog(
+      BuildContext context, WidgetRef ref, int pageIndex, int signatureIndex) {
+    showDialog(
+      barrierDismissible: false,
+      context: context,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => true,
+        child: SignatureDialog(
+          pageIndex: pageIndex,
+          signatureIndex: signatureIndex,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _savePDF(
+      BuildContext context, PdfNotifier notifier, WidgetRef ref) async {
+    final connectionDetails = ref.read(ftpConnectionDetailsProvider);
+
+    if (connectionDetails == null || !connectionDetails.isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('FTP bağlantı bilgileri eksik!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Loading göster
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: const AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF112b66)),
+              SizedBox(width: 16),
+              Text('PDF kaydediliyor...'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final result = await notifier.createSignedPDF();
+      final Uint8List signedPdfBytes = result['bytes'];
+      final String fileName = '${result['fileName']}.pdf';
+
+      // Dosya var mı kontrol et
+      final existingFiles = await FtpPdfLoader.listPdfFiles(
+        host: connectionDetails.host,
+        username: connectionDetails.username,
+        password: connectionDetails.password,
+        port: connectionDetails.port,
+      );
+
+      final fileExists = existingFiles.any((file) => file.name == fileName);
+      bool shouldOverwrite = true;
+
+      if (context.mounted) Navigator.pop(context);
+
+      // Dosya varsa onay iste
+      if (fileExists && context.mounted) {
+        shouldOverwrite = await showDialog<bool>(
+              barrierDismissible: false,
+              context: context,
+              builder: (context) => WillPopScope(
+                onWillPop: () async {
+                  Navigator.pop(context, false);
+                  return false;
+                },
+                child: AlertDialog(
+                  title: const Text(
+                    'Dosya Mevcut',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  content: Text(
+                      '$fileName zaten mevcut. Üstüne yazmak istiyor musunuz?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text(
+                        'İptal',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.black),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text(
+                        'Üstüne Yaz',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ) ??
+            false;
+      }
+
+      if (!shouldOverwrite) return;
+
+      // Upload loading
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => WillPopScope(
+            onWillPop: () async => false,
+            child: AlertDialog(
+              content: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: Color(0xFF112b66)),
+                  const SizedBox(width: 16),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('FTP\'ye yükleniyor...'),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${connectionDetails.host}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      final success = await FtpPdfLoader.uploadPdfToFtp(
+        host: connectionDetails.host,
+        username: connectionDetails.username,
+        password: connectionDetails.password,
+        pdfBytes: signedPdfBytes,
+        fileName: fileName,
+        port: connectionDetails.port,
+        overwrite: shouldOverwrite,
+      );
+
+      if (context.mounted) Navigator.pop(context);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: success
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('PDF kaydedildi: $fileName'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Bağlantı: ${connectionDetails.name}',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  )
+                : const Text('PDF kaydetme başarısız!'),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'PDF kaydetme hatası: Lütfen tekrar deneyiniz, internetinizi kontrol ediniz'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sharePDF(BuildContext context, PdfNotifier notifier) async {
+    try {
+      final Map<String, dynamic> result = await notifier.createSignedPDF();
+      final Uint8List signedPdfBytes = result['bytes'];
+      final String fileName = result['fileName'];
+
+      await Printing.sharePdf(
+        bytes: signedPdfBytes,
+        filename: '$fileName.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF paylaşma hatası: $e')),
+        );
+      }
+    }
+  }
+}

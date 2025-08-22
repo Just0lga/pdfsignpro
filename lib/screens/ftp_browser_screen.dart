@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
+import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
@@ -28,8 +29,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   @override
   void initState() {
-    print("XXX pftp_browser_screen.dart");
-
+    print("XXX ftp_browser_screen.dart");
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnectionAndList();
@@ -817,7 +817,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
       if (context.mounted) {
         Navigator.pop(context);
-        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PdfSignScreen(),
+          ),
+        );
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
