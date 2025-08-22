@@ -5,6 +5,7 @@ import 'package:pdfsignpro/models/frontend_models/pdf_state.dart';
 import 'package:pdfsignpro/provider/auth_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
+import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
 import 'package:printing/printing.dart';
 import '../services/ftp_pdf_loader.dart';
 import '../widgets/pdf_page_widget.dart';
@@ -32,8 +33,22 @@ class PdfSignScreen extends ConsumerWidget {
           iconTheme: IconThemeData(color: Colors.white),
           centerTitle: true,
           actions: _buildActions(context, pdfState, pdfNotifier, ref),
+          leading: IconButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => FtpBrowserScreen()));
+              },
+              icon: Icon(Icons.arrow_back_ios_new)),
         ),
-        body: _buildBody(context, ref, pdfState, pdfNotifier),
+        body: WillPopScope(
+            onWillPop: () async {
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (context) => FtpBrowserScreen()));
+              return true;
+            },
+            child: _buildBody(context, ref, pdfState, pdfNotifier)),
       ),
     );
   }
@@ -274,11 +289,6 @@ class PdfSignScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('FTP\'ye yükleniyor...'),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${connectionDetails.host}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
                     ],
                   ),
                 ],

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
+import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
@@ -314,44 +315,64 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('FTP PDF Listesi',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        iconTheme: IconThemeData(color: Colors.white),
-        backgroundColor: Color(0xFF112b66),
-        centerTitle: true,
-        actions: [
-          // Test butonu
-          /*
-          IconButton(
-            icon: Icon(Icons.bug_report, color: Colors.white),
-            onPressed: _testFtpConnection,
-            tooltip: 'FTP Test',
-          ),*/
-          IconButton(
-            icon: Icon(Icons.refresh, color: Colors.white),
-            onPressed: _isLoading ? null : _checkConnectionAndList,
-            tooltip: 'Yenile',
-          ),
-          // Bağlantı durumu göstergesi
-          Container(
-            margin: EdgeInsets.only(right: 8),
-            child: Icon(
-              _hasInternetConnection ? Icons.wifi : Icons.wifi_off,
-              color: _hasInternetConnection ? Colors.green : Colors.red,
-              size: 24,
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PdfSourceSelectionScreen(),
+            ));
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('FTP PDF Listesi',
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          iconTheme: IconThemeData(color: Colors.white),
+          backgroundColor: Color(0xFF112b66),
+          centerTitle: true,
+          actions: [
+            // Test butonu
+            /*
+            IconButton(
+              icon: Icon(Icons.bug_report, color: Colors.white),
+              onPressed: _testFtpConnection,
+              tooltip: 'FTP Test',
+            ),*/
+            IconButton(
+              icon: Icon(Icons.refresh, color: Colors.white),
+              onPressed: _isLoading ? null : _checkConnectionAndList,
+              tooltip: 'Yenile',
             ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildConnectionInfo(),
-          Expanded(
-            child: _buildFileList(),
-          ),
-        ],
+            // Bağlantı durumu göstergesi
+            Container(
+              margin: EdgeInsets.only(right: 8),
+              child: Icon(
+                _hasInternetConnection ? Icons.wifi : Icons.wifi_off,
+                color: _hasInternetConnection ? Colors.green : Colors.red,
+                size: 24,
+              ),
+            ),
+          ],
+          leading: IconButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PdfSourceSelectionScreen(),
+                    ));
+              },
+              icon: Icon(Icons.arrow_back_ios_new)),
+        ),
+        body: Column(
+          children: [
+            _buildConnectionInfo(),
+            Expanded(
+              child: _buildFileList(),
+            ),
+          ],
+        ),
       ),
     );
   }

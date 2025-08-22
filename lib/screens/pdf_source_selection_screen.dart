@@ -26,6 +26,7 @@ class _PdfSourceSelectionScreenState
   @override
   void initState() {
     print("XXX pdf_source_selection_screen.dart");
+    _performManualRefresh();
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _performInitialCheck();
