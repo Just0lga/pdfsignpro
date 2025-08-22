@@ -27,7 +27,6 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
   @override
   void initState() {
     super.initState();
-    print("XXX${widget.pageIndex}_${widget.signatureIndex}");
     _key = '${widget.pageIndex}_${widget.signatureIndex}';
     _renderFuture = ref.read(pdfProvider.notifier).renderPage(widget.pageIndex);
 

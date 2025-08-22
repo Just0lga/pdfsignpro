@@ -718,35 +718,40 @@ class _PdfSourceSelectionScreenState
   void _logout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Çıkış Yap'),
-        content: Text('Uygulamadan çıkmak istediğinizden emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-              ref.read(pdfProvider.notifier).reset();
-              ref.read(selectedFtpConnectionProvider.notifier).state = null;
-
-              Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Başarıyla çıkış yapıldı'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: Text(
-              'Çıkış Yap',
-              style: TextStyle(color: Colors.red),
+      barrierDismissible: false, // Dış alana dokunarak kapatmayı engelle
+      builder: (context) => WillPopScope(
+        onWillPop: () async =>
+            true, // Geri tuşuna izin ver - çıkış dialog'u için
+        child: AlertDialog(
+          title: Text('Çıkış Yap'),
+          content: Text('Uygulamadan çıkmak istediğinizden emin misiniz?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('İptal'),
             ),
-          ),
-        ],
+            TextButton(
+              onPressed: () {
+                ref.read(authProvider.notifier).logout();
+                ref.read(pdfProvider.notifier).reset();
+                ref.read(selectedFtpConnectionProvider.notifier).state = null;
+
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Başarıyla çıkış yapıldı'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: Text(
+                'Çıkış Yap',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

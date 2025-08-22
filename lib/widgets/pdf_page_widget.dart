@@ -200,7 +200,6 @@ class _PdfPageWidgetState extends ConsumerState<PdfPageWidget> {
     // Sayfa genişliğine göre dinamik imza kutu boyutları
     double boxWidth;
     double boxHeight;
-    print("XXX${responsiveSize.width}");
     if (responsiveSize.width <= 400) {
       // Çok küçük ekranlar (mobil portrait)
       boxWidth = 100;

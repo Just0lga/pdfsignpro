@@ -323,11 +323,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         centerTitle: true,
         actions: [
           // Test butonu
+          /*
           IconButton(
             icon: Icon(Icons.bug_report, color: Colors.white),
             onPressed: _testFtpConnection,
             tooltip: 'FTP Test',
-          ),
+          ),*/
           IconButton(
             icon: Icon(Icons.refresh, color: Colors.white),
             onPressed: _isLoading ? null : _checkConnectionAndList,
@@ -699,13 +700,16 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(color: Color(0xFF112b66)),
-              SizedBox(width: 16),
-              Text('Test PDF yükleniyor...'),
-            ],
+        builder: (context) => WillPopScope(
+          onWillPop: () async => false, // Geri tuşunu engelle
+          child: AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(color: Color(0xFF112b66)),
+                SizedBox(width: 16),
+                Text('Test PDF yükleniyor...'),
+              ],
+            ),
           ),
         ),
       );
@@ -769,27 +773,30 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: Color(0xFF112b66)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${file.name} indiriliyor...'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Boyut: ${file.sizeFormatted}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false, // Geri tuşunu engelle
+        child: AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF112b66)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${file.name} indiriliyor...'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Boyut: ${file.sizeFormatted}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

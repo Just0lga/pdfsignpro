@@ -184,9 +184,12 @@ class PdfImzaScreen extends ConsumerWidget {
     showDialog(
       barrierDismissible: false,
       context: context,
-      builder: (context) => SignatureDialog(
-        pageIndex: pageIndex,
-        signatureIndex: signatureIndex,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => true, // İmza dialog'unda geri tuşuna izin ver
+        child: SignatureDialog(
+          pageIndex: pageIndex,
+          signatureIndex: signatureIndex,
+        ),
       ),
     );
   }
@@ -198,14 +201,17 @@ class PdfImzaScreen extends ConsumerWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            CircularProgressIndicator(color: Color(0xFF112b66)),
-            Text('Sunucular yenileniyor...'),
-          ],
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false, // Geri tuşunu engelle
+        child: AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF112b66)),
+              Text('Sunucular yenileniyor...'),
+            ],
+          ),
         ),
       ),
     );
@@ -318,14 +324,17 @@ class PdfImzaScreen extends ConsumerWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: Color(0xFF112b66)),
-            SizedBox(width: 16),
-            Text('PDF kaydediliyor...'),
-          ],
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false, // Geri tuşunu engelle
+        child: const AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF112b66)),
+              SizedBox(width: 16),
+              Text('PDF kaydediliyor...'),
+            ],
+          ),
         ),
       ),
     );
@@ -380,25 +389,28 @@ class PdfImzaScreen extends ConsumerWidget {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            content: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(color: Color(0xFF112b66)),
-                const SizedBox(width: 16),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('FTP\'ye yükleniyor...'),
-                    const SizedBox(height: 4),
-                    /*Text(
-                      '${connectionDetails.name} (${connectionDetails.host})',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),*/
-                  ],
-                ),
-              ],
+          builder: (context) => WillPopScope(
+            onWillPop: () async => false, // Geri tuşunu engelle
+            child: AlertDialog(
+              content: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: Color(0xFF112b66)),
+                  const SizedBox(width: 16),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('FTP\'ye yükleniyor...'),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${connectionDetails.host}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -481,29 +493,33 @@ class PdfImzaScreen extends ConsumerWidget {
 
   void _logout(BuildContext context, WidgetRef ref) {
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Çıkış Yap',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Uygulamadan çıkmak istediğinizden emin misiniz?'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'İptal',
-              style:
-                  TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-            ),
-          ),
-          /*
+        context: context,
+        barrierDismissible: false, // Dış alana dokunarak kapatmayı engelle
+        builder: (context) => WillPopScope(
+              onWillPop: () async =>
+                  true, // Geri tuşuna izin ver - çıkış dialog'u için
+              child: AlertDialog(
+                title: Text(
+                  'Çıkış Yap',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Uygulamadan çıkmak istediğinizden emin misiniz?'),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'İptal',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, color: Colors.black),
+                    ),
+                  ),
+                  /*
           TextButton(
             onPressed: () {
               // 🔥 Normal çıkış - CACHE KORUNUR
@@ -525,29 +541,34 @@ class PdfImzaScreen extends ConsumerWidget {
               style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
             ),
           ),*/
-          TextButton(
-            onPressed: () {
-              // 🔥 Tamamen çıkış - CACHE TEMİZLE
-              ref.read(authProvider.notifier).logout(clearRememberMe: true);
-              ref.read(pdfProvider.notifier).reset();
-              ref.read(selectedFtpConnectionProvider.notifier).state = null;
+                  TextButton(
+                    onPressed: () {
+                      // 🔥 Tamamen çıkış - CACHE TEMİZLE
+                      ref
+                          .read(authProvider.notifier)
+                          .logout(clearRememberMe: true);
+                      ref.read(pdfProvider.notifier).reset();
+                      ref.read(selectedFtpConnectionProvider.notifier).state =
+                          null;
 
-              Navigator.pop(context);
+                      Navigator.pop(context);
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Tamamen çıkış yapıldı'), //Tüm veriler silindi
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
-            child: Text(
-              'Çıkış', //Tamamen Çık
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              'Tamamen çıkış yapıldı'), //Tüm veriler silindi
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'Çıkış', //Tamamen Çık
+                      style: TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ));
   }
 }
