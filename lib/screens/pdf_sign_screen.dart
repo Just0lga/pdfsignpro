@@ -2,18 +2,26 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/models/frontend_models/pdf_state.dart';
-import 'package:pdfsignpro/provider/auth_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
+import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:printing/printing.dart';
 import '../services/ftp_pdf_loader.dart';
 import '../widgets/pdf_page_widget.dart';
 import '../widgets/signature_dialog.dart';
 
 class PdfSignScreen extends ConsumerWidget {
+  final bool typeFtp;
+
+  // Constructor
+  const PdfSignScreen({Key? key, this.typeFtp = true}) : super(key: key);
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
     final pdfState = ref.watch(pdfProvider);
     final pdfNotifier = ref.read(pdfProvider.notifier);
 
@@ -38,7 +46,9 @@ class PdfSignScreen extends ConsumerWidget {
                 Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => FtpBrowserScreen()));
+                        builder: (context) => typeFtp
+                            ? FtpBrowserScreen()
+                            : PdfSourceSelectionScreen()));
               },
               icon: Icon(Icons.arrow_back_ios_new)),
         ),

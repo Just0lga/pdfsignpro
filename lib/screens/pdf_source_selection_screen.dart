@@ -666,7 +666,7 @@ class _PdfSourceSelectionScreenState
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfSignScreen(),
+            builder: (context) => PdfSignScreen(typeFtp: false),
           ),
         );
 
@@ -714,7 +714,9 @@ class _PdfSourceSelectionScreenState
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfSignScreen(),
+            builder: (context) => PdfSignScreen(
+              typeFtp: false,
+            ),
           ),
         );
 

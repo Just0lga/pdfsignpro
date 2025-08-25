@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfsignpro/services/preference_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,7 +7,7 @@ import '../models/backend_models/full_response.dart';
 import '../models/backend_models/perm.dart';
 
 class AuthService {
-  static const String baseUrl = "http://84.51.13.196:9092"; // Port düzeltildi
+  static const String baseUrl = "http://192.168.1.16:9092"; // Port düzeltildi
 
   // Cache'de saklanan son başarılı giriş bilgileri
   static const String _lastSuccessfulUsernameKey = 'last_successful_username';
@@ -23,10 +22,9 @@ class AuthService {
     bool isAutoLogin = false,
   }) async {
     // Gelen şifre zaten işlenmiş, sadece SHA256 hash yapılacak
-    final bytes = utf8.encode(password);
-    final hash = sha256.convert(bytes).toString();
+    final hash = password;
 
-    print('🔑 İşlenmiş şifre: $password');
+    print('🔑 Hashed şifre: $password');
     print('🔒 SHA256 hash: $hash');
 
     if (useCache) {

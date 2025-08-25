@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/provider/auth_provider.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
 import 'package:pdfsignpro/widgets/app_text_field.dart';
+import 'package:crypto/crypto.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -63,12 +66,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (remember) {
         final credentials = await PreferencesService.getCredentials();
         final username = credentials['username'];
-        final rawPassword = credentials['password']; // 🔥 Bu artık RAW şifre
+        final hashedPassword =
+            credentials['password']; // 🔥 Bu artık HASHED şifre
 
-        if (username != null && rawPassword != null && mounted) {
+        if (username != null && hashedPassword != null && mounted) {
           setState(() {
             usernameController.text = username;
-            passwordController.text = rawPassword; // 🔥 RAW şifreyi göster
+            passwordController.text = "";
             rememberMe = true;
           });
         }
@@ -97,14 +101,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       return;
     }
 
-    final authNotifier = ref.read(authProvider.notifier);
+    final processedPassword = rawPassword + "pdfSignPro2024!@";
+    final bytes = utf8.encode(processedPassword);
+    final hashedPassword = sha256.convert(bytes).toString();
 
+    final authNotifier = ref.read(authProvider.notifier);
     // ✅ MANUEL GİRİŞ - API zorunlu
     print('🔐 Manuel giriş başlatılıyor: $username');
 
     final success = await authNotifier.login(
       username,
-      rawPassword,
+      hashedPassword,
       rememberMe: rememberMe,
       isAutoLogin: false, // ✅ Manuel giriş
     );
