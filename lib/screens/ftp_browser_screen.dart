@@ -317,11 +317,11 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PdfSourceSelectionScreen(),
-            ));
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => PdfSourceSelectionScreen()),
+          (Route<dynamic> route) => false, // tüm eski route’ları sil
+        );
         return true;
       },
       child: Scaffold(
@@ -357,11 +357,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           ],
           leading: IconButton(
               onPressed: () {
-                Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PdfSourceSelectionScreen(),
-                    ));
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => PdfSourceSelectionScreen()),
+                  (Route<dynamic> route) => false, // tüm eski route’ları sil
+                );
               },
               icon: Icon(Icons.arrow_back_ios_new)),
         ),
@@ -385,15 +386,23 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          Row(
-            children: [
-              const Icon(Icons.person, size: 20),
-              const SizedBox(width: 4),
-              Text(
-                'Kullanıcı: ${selectedFtpConnection?.uname}',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ],
+          const Icon(Icons.person, size: 20),
+          const SizedBox(width: 4),
+          Text(
+            'Kullanıcı: ${selectedFtpConnection?.uname}',
+            style: const TextStyle(fontSize: 13),
+          ),
+          Text(
+            'Kullanıcı: ${selectedFtpConnection?.host}',
+            style: const TextStyle(fontSize: 13),
+          ),
+          Text(
+            'Kullanıcı: ${selectedFtpConnection?.pass}',
+            style: const TextStyle(fontSize: 13),
+          ),
+          Text(
+            'Kullanıcı: ${selectedFtpConnection?.port}',
+            style: const TextStyle(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Row(

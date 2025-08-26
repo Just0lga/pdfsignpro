@@ -12,16 +12,10 @@ import '../widgets/pdf_page_widget.dart';
 import '../widgets/signature_dialog.dart';
 
 class PdfSignScreen extends ConsumerWidget {
-  final bool typeFtp;
-
-  // Constructor
-  const PdfSignScreen({Key? key, this.typeFtp = true}) : super(key: key);
-
+  final bool isItFtp;
+  const PdfSignScreen({this.isItFtp = true});
   @override
-  Widget build(
-    BuildContext context,
-    WidgetRef ref,
-  ) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final pdfState = ref.watch(pdfProvider);
     final pdfNotifier = ref.read(pdfProvider.notifier);
 
@@ -43,19 +37,27 @@ class PdfSignScreen extends ConsumerWidget {
           actions: _buildActions(context, pdfState, pdfNotifier, ref),
           leading: IconButton(
               onPressed: () {
-                Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => typeFtp
-                            ? FtpBrowserScreen()
-                            : PdfSourceSelectionScreen()));
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => isItFtp
+                          ? FtpBrowserScreen()
+                          : PdfSourceSelectionScreen()),
+                  (Route<dynamic> route) => false, // tüm eski route’ları sil
+                );
               },
               icon: Icon(Icons.arrow_back_ios_new)),
         ),
         body: WillPopScope(
             onWillPop: () async {
-              Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (context) => FtpBrowserScreen()));
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => isItFtp
+                        ? FtpBrowserScreen()
+                        : PdfSourceSelectionScreen()),
+                (Route<dynamic> route) => false, // tüm eski route’ları sil
+              );
               return true;
             },
             child: _buildBody(context, ref, pdfState, pdfNotifier)),

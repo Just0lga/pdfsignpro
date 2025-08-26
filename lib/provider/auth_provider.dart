@@ -45,6 +45,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   // Uygulama başlatıldığında otomatik giriş kontrolü
+  // Uygulama başlatıldığında otomatik giriş kontrolü
   Future<void> _checkAutoLogin() async {
     state = state.copyWith(isCheckingAutoLogin: true);
 
@@ -62,16 +63,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Credentials kontrolü
       final credentials = await PreferencesService.getCredentials();
       final username = credentials['username'];
-      final hashedPassword = credentials['password'];
+      final rawPassword = credentials['password'];
 
-      if (username == null || hashedPassword == null) {
+      if (username == null || rawPassword == null) {
         print('❌ Credentials eksik - normal login');
         state = state.copyWith(isCheckingAutoLogin: false);
         return;
       }
 
       // API ile giriş yapmayı dene (cache backup ile)
-      final success = await login(username, hashedPassword, isAutoLogin: true);
+      final success = await login(username, rawPassword, isAutoLogin: true);
 
       // 🔥 BURADA EKSİK OLAN KISIM: Başarılı olursa state'i güncelle
       if (success) {
@@ -91,7 +92,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> login(String username, String hashedPassword,
+  Future<bool> login(String username, String rawPassword,
       {bool rememberMe = false, bool isAutoLogin = false}) async {
     if (!isAutoLogin) {
       state = state.copyWith(isLoading: true, clearError: true);
@@ -99,12 +100,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     try {
       // Şifre işleme
+      final processedPassword = rawPassword + "pdfSignPro2024!@";
 
       // ÖNCE API'yi dene - Retry mechanism ile
       try {
         final response = await AuthService.loginWithRetry(
           username: username,
-          password: hashedPassword,
+          password: processedPassword,
           maxRetries: isAutoLogin ? 1 : 2, // AutoLogin için daha az retry
           isAutoLogin: isAutoLogin,
         );
@@ -122,7 +124,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             await PreferencesService.setRememberMe(true);
             print('💾 Remember me aktif edildi');
           }
-          await PreferencesService.saveCredentials(username, hashedPassword);
+          await PreferencesService.saveCredentials(username, rawPassword);
 
           return true;
         }
@@ -224,15 +226,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       final credentials = await PreferencesService.getCredentials();
       final username = credentials['username'];
-      final hashedPassword = credentials['password'];
+      final rawPassword = credentials['password'];
 
-      if (username != null && hashedPassword != null) {
+      if (username != null && rawPassword != null) {
         // Şifreyi işle ve AuthService'e gönder
+        final processedPassword = rawPassword + "pdfSignPro2024!@";
 
         // API'den çekmeyi dene - BAŞARISIZ OLURSA CACHE'İ TEMİZLEME!
         final response = await AuthService.login(
             username: username,
-            password: hashedPassword,
+            password: processedPassword,
             useCache: false,
             isAutoLogin: false);
 
@@ -265,13 +268,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       final credentials = await PreferencesService.getCredentials();
       final username = credentials['username'];
-      final hashedPassword = credentials['password'];
+      final rawPassword = credentials['password'];
 
       print('Refresh için credentials:');
       print('  Username: ${username ?? "NULL"}');
-      print('  Raw Password uzunluk: ${hashedPassword?.length ?? 0}');
+      print('  Raw Password uzunluk: ${rawPassword?.length ?? 0}');
 
-      if (username == null || hashedPassword == null) {
+      if (username == null || rawPassword == null) {
         print('Refresh için credentials eksik');
         state = state.copyWith(isLoading: false);
         return false;
@@ -281,14 +284,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: true, clearError: true);
 
       // Şifreyi işle
+      final processedPassword = rawPassword + "pdfSignPro2024!@";
       print(
-          'Şifre işlendi: ${hashedPassword} -> ${hashedPassword.length} karakter');
+          'Şifre işlendi: ${rawPassword} -> ${processedPassword.length} karakter');
 
       // API çağrısı - TIMEOUT İLE
       print('Retry ile API çağrısı yapılıyor...');
       final response = await AuthService.loginWithRetry(
         username: username,
-        password: hashedPassword,
+        password: processedPassword,
         maxRetries: 3,
         isAutoLogin: false,
       ).timeout(

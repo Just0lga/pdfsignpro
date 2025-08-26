@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/provider/auth_provider.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
 import 'package:pdfsignpro/widgets/app_text_field.dart';
-import 'package:crypto/crypto.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -66,13 +63,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (remember) {
         final credentials = await PreferencesService.getCredentials();
         final username = credentials['username'];
-        final hashedPassword =
-            credentials['password']; // 🔥 Bu artık HASHED şifre
+        final rawPassword = credentials['password']; // 🔥 Bu artık RAW şifre
 
-        if (username != null && hashedPassword != null && mounted) {
+        if (username != null && rawPassword != null && mounted) {
           setState(() {
             usernameController.text = username;
-            passwordController.text = "";
+            passwordController.text = rawPassword; // 🔥 RAW şifreyi göster
             rememberMe = true;
           });
         }
@@ -101,17 +97,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       return;
     }
 
-    final processedPassword = rawPassword + "pdfSignPro2024!@";
-    final bytes = utf8.encode(processedPassword);
-    final hashedPassword = sha256.convert(bytes).toString();
-
     final authNotifier = ref.read(authProvider.notifier);
+
     // ✅ MANUEL GİRİŞ - API zorunlu
     print('🔐 Manuel giriş başlatılıyor: $username');
 
     final success = await authNotifier.login(
       username,
-      hashedPassword,
+      rawPassword,
       rememberMe: rememberMe,
       isAutoLogin: false, // ✅ Manuel giriş
     );
@@ -143,9 +136,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       await Future.delayed(Duration(milliseconds: 800));
 
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => PdfSourceSelectionScreen()),
+          (Route<dynamic> route) => false, // tüm eski route’ları sil
         );
       }
     } else {

@@ -6,6 +6,7 @@ import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/local_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
+import 'package:pdfsignpro/screens/login_screen.dart';
 import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
 import 'package:pdfsignpro/services/local_pdf_loader.dart';
 import 'package:pdfsignpro/services/asset_pdf_loader.dart';
@@ -666,7 +667,7 @@ class _PdfSourceSelectionScreenState
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfSignScreen(typeFtp: false),
+            builder: (context) => PdfSignScreen(isItFtp: false),
           ),
         );
 
@@ -714,9 +715,7 @@ class _PdfSourceSelectionScreenState
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfSignScreen(
-              typeFtp: false,
-            ),
+            builder: (context) => PdfSignScreen(isItFtp: false),
           ),
         );
 
@@ -778,7 +777,11 @@ class _PdfSourceSelectionScreenState
                 ref.read(pdfProvider.notifier).reset();
                 ref.read(selectedFtpConnectionProvider.notifier).state = null;
 
-                Navigator.pop(context);
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => LoginScreen()),
+                  (Route<dynamic> route) => false, // tüm eski route’ları sil
+                );
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

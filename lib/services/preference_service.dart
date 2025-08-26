@@ -20,28 +20,27 @@ class PreferencesService {
     return prefs.getBool(_rememberMeKey) ?? false;
   }
 
-  // Kullanıcı bilgilerini kaydet - HASHED şifre
-  static Future<void> saveCredentials(
-      String username, String hashedPassword) async {
+  // Kullanıcı bilgilerini kaydet - RAW şifre
+  static Future<void> saveCredentials(String username, String password) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_usernameKey, username);
-    await prefs.setString(_passwordKey, hashedPassword); // RAW şifre
-    print('💾 Hashed şifre kaydedildi"$hashedPassword"');
+    await prefs.setString(_passwordKey, password); // RAW şifre
+    print('💾 RAW şifre kaydedildi: "$password"');
   }
 
-  // Kullanıcı bilgilerini al - HASHED şifre
+  // Kullanıcı bilgilerini al - RAW şifre
   static Future<Map<String, String?>> getCredentials() async {
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString(_usernameKey);
     final password = prefs.getString(_passwordKey); // RAW şifre
 
     if (password != null) {
-      print('📦 Hashed şifre okundu');
+      print('📦 RAW şifre okundu: "$password"');
     }
 
     return {
       'username': username,
-      'password': password, // hashedPassword şifre
+      'password': password, // RAW şifre
     };
   }
 
