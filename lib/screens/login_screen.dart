@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/provider/auth_provider.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
 import 'package:pdfsignpro/widgets/app_text_field.dart';
+import 'package:crypto/crypto.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -25,10 +28,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void initState() {
     print("xxx login screen");
     super.initState();
-
-    // 🔥 Test değerleri kaldırıldı - boş başlıyor
-    usernameController.text = 'test';
-    passwordController.text = 'test';
 
     // Kayıtlı remember me durumunu yükle
     _loadRememberMeState();
@@ -63,12 +62,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (remember) {
         final credentials = await PreferencesService.getCredentials();
         final username = credentials['username'];
-        final rawPassword = credentials['password']; // 🔥 Bu artık RAW şifre
+        final hashedPassword =
+            credentials['password']; // 🔥 Bu artık hash şifre
 
-        if (username != null && rawPassword != null && mounted) {
+        if (username != null && hashedPassword != null && mounted) {
           setState(() {
             usernameController.text = username;
-            passwordController.text = rawPassword; // 🔥 RAW şifreyi göster
+            passwordController.text = hashedPassword; // 🔥 RAW şifreyi göster
             rememberMe = true;
           });
         }
@@ -91,6 +91,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Future<void> login() async {
     final username = usernameController.text.trim();
     final rawPassword = passwordController.text.trim();
+    final processedPassword = rawPassword + "pdfSignPro2024!@";
+
+    // Gelen şifre zaten işlenmiş, sadece SHA256 hash yapılacak
+    final bytes = utf8.encode(processedPassword);
+    final hash = sha256.convert(bytes).toString();
 
     if (username.isEmpty || rawPassword.isEmpty) {
       _showCustomSnackBar("Lütfen tüm alanları doldurun", Colors.orange);
@@ -104,7 +109,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     final success = await authNotifier.login(
       username,
-      rawPassword,
+      hash,
       rememberMe: rememberMe,
       isAutoLogin: false, // ✅ Manuel giriş
     );
@@ -129,7 +134,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       print('   Kaynak: $loginSource');
 
       _showCustomSnackBar(
-        "Giriş başarılı! ${validFtpPermissions.length} FTP izni bulundu.\n$loginSource",
+        "Giriş başarılı!",
         Colors.green,
       );
 

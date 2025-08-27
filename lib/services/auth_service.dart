@@ -18,19 +18,14 @@ class AuthService {
   //✅ Klasik login bu
   static Future<FullResponse?> login({
     required String username,
-    required String password, // İşlenmiş şifre geliyor
+    required String hashedPassword, // İşlenmiş şifre geliyor
     bool useCache = true,
     bool isAutoLogin = false,
   }) async {
-    // Gelen şifre zaten işlenmiş, sadece SHA256 hash yapılacak
-    final bytes = utf8.encode(password);
-    final hash = sha256.convert(bytes).toString();
-
-    print('🔑 İşlenmiş şifre: $password');
-    print('🔒 SHA256 hash: $hash');
+    print('🔑 İşlenmiş şifre: $hashedPassword');
 
     if (useCache) {
-      final cachedResponse = await _tryLoginWithCache(username, hash);
+      final cachedResponse = await _tryLoginWithCache(username, hashedPassword);
       if (cachedResponse != null) {
         return cachedResponse;
       }
@@ -41,7 +36,7 @@ class AuthService {
 
       final body = jsonEncode({
         "username": username,
-        "passwordHash": hash,
+        "passwordHash": hashedPassword,
       });
 
       print('🔗 API isteği: $uri');
@@ -112,7 +107,7 @@ class AuthService {
           final fullResponse = FullResponse.fromJson(data);
 
           // Başarılı giriş bilgilerini kaydet
-          await _saveSuccessfulLoginCredentials(username, hash);
+          await _saveSuccessfulLoginCredentials(username, hashedPassword);
 
           // Cache'e kaydet
           await PreferencesService.cacheFullResponse(fullResponse);
@@ -141,7 +136,8 @@ class AuthService {
 
       if (useCache) {
         print('🔄 API başarısız, cache\'den deneniyor...');
-        final cachedResponse = await _tryLoginWithCache(username, hash);
+        final cachedResponse =
+            await _tryLoginWithCache(username, hashedPassword);
         if (cachedResponse != null) {
           print('✅ Cache\'den giriş başarılı');
           return cachedResponse;
@@ -173,7 +169,7 @@ class AuthService {
 
         final result = await login(
           username: username,
-          password: password,
+          hashedPassword: password,
           useCache: false, // Retry'da cache kullanma
           isAutoLogin: isAutoLogin,
         );
@@ -321,7 +317,7 @@ class AuthService {
       print('🔄 Cache yenileniyor...');
       final response = await login(
         username: username,
-        password: password,
+        hashedPassword: password,
         useCache: false,
         isAutoLogin: false,
       );

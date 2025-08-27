@@ -54,11 +54,10 @@ class _PdfSourceSelectionScreenState
       final assetCount = authState.fullResponse!.perList
           .where((p) => p.type == 'asset' && p.ap == 1)
           .length;
-
-      _showApiMessage(
-          'Mevcut server listesi\n$ftpCount FTP, $localCount Local, $assetCount Asset server',
-          Colors.blue,
-          Icons.info);
+      // _showApiMessage(
+      //     'Mevcut server listesi\n$ftpCount FTP, $localCount Local, $assetCount Asset server',
+      //     Colors.blue,
+      //     Icons.info);
       return;
     }
 
@@ -117,11 +116,12 @@ class _PdfSourceSelectionScreenState
           final assetCount = currentState.fullResponse!.perList
               .where((p) => p.type == 'asset' && p.ap == 1)
               .length;
-
           _showApiMessage(
-              'Server listesi güncellendi\n$ftpCount FTP, $localCount Local, $assetCount Asset server',
-              Colors.green,
-              Icons.cloud_done);
+              'Server listesi güncellendi', Colors.green, Icons.cloud_done);
+          //_showApiMessage(
+          //     'Server listesi güncellendi\n$ftpCount FTP, $localCount Local, $assetCount Asset server',
+          //     Colors.green,
+          //     Icons.cloud_done);
         }
       } else {
         _showApiMessage('Offline mod - Kaydedilmiş server listesi gösteriliyor',
@@ -639,6 +639,7 @@ class _PdfSourceSelectionScreenState
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        behavior: SnackBarBehavior.floating,
         content: Row(
           children: [
             Icon(Icons.dns, color: Colors.white),
@@ -785,7 +786,17 @@ class _PdfSourceSelectionScreenState
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Tamamen çıkış yapıldı'),
+                    behavior: SnackBarBehavior.floating,
+                    content: Row(
+                      children: [
+                        Icon(
+                          Icons.logout,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 8),
+                        Text('Tamamen çıkış yapıldı'),
+                      ],
+                    ),
                     backgroundColor: Colors.red,
                   ),
                 );

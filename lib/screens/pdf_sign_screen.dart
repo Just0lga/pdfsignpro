@@ -128,7 +128,10 @@ class PdfSignScreen extends ConsumerWidget {
             SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () => Navigator.pop(context),
-              icon: Icon(Icons.arrow_back),
+              icon: Icon(
+                Icons.arrow_back,
+                color: Colors.white,
+              ),
               label: Text('Geri Dön'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Color(0xFF112b66),
@@ -325,6 +328,7 @@ class PdfSignScreen extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            behavior: SnackBarBehavior.floating,
             content: success
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
@@ -349,6 +353,7 @@ class PdfSignScreen extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            behavior: SnackBarBehavior.floating,
             content: Text(
                 'PDF kaydetme hatası: Lütfen tekrar deneyiniz, internetinizi kontrol ediniz'),
             backgroundColor: Colors.red,

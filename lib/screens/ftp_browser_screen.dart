@@ -637,7 +637,10 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _checkConnectionAndList,
-            icon: Icon(Icons.refresh),
+            icon: Icon(
+              Icons.refresh,
+              color: Colors.white,
+            ),
             label: Text('Tekrar Dene'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Color(0xFF112b66),
@@ -848,6 +851,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            behavior: SnackBarBehavior.floating,
             content: Text('${file.name} başarıyla yüklendi'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
