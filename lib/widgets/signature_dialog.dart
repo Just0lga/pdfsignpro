@@ -76,47 +76,68 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                TextButton(
-                  style: TextButton.styleFrom(
-                      backgroundColor: Colors.red.withOpacity(0.5)),
-                  onPressed: () {
-                    _controller.clear();
-                    notifier.clearSignature(_key);
-                    Navigator.pop(context);
-                  },
-                  child: const Text(
-                    'Temizle',
-                    style: TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold),
+                Expanded(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                        backgroundColor: Colors.red.withOpacity(0.5)),
+                    onPressed: () {
+                      _controller.clear();
+                      notifier.clearSignature(_key);
+                      Navigator.pop(context);
+                    },
+                    child: FittedBox(
+                      child: const Text(
+                        'Temizle',
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ),
-                TextButton(
-                  style: TextButton.styleFrom(
-                      backgroundColor: Colors.black.withOpacity(0.2)),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'İptal',
-                    style: TextStyle(
-                        color: Colors.black, fontWeight: FontWeight.bold),
+                SizedBox(
+                  width: 8,
+                ),
+                Expanded(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                        backgroundColor: Colors.black.withOpacity(0.2)),
+                    onPressed: () => Navigator.pop(context),
+                    child: FittedBox(
+                      child: const Text(
+                        'İptal',
+                        style: TextStyle(
+                            color: Colors.black, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ),
-                TextButton(
-                  style: TextButton.styleFrom(
-                      backgroundColor: Colors.green.withOpacity(0.3)),
-                  onPressed: () async {
-                    final signature = await _controller.toPngBytes();
-                    if (signature != null) {
-                      notifier.updateSignature(_key, signature);
-                    }
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: const Text(
-                    'Kaydet',
-                    style: TextStyle(
-                        color: Colors.green, fontWeight: FontWeight.bold),
+                SizedBox(
+                  width: 8,
+                ),
+                Expanded(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                        backgroundColor: Colors.green.withOpacity(0.3)),
+                    onPressed: () async {
+                      final signature = await _controller.toPngBytes();
+                      if (signature != null) {
+                        notifier.updateSignature(_key, signature);
+                      }
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    child: FittedBox(
+                      child: const Text(
+                        'Kaydet',
+                        style: TextStyle(
+                            color: Colors.green, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ),
               ],
+            ),
+            SizedBox(
+              height: 8,
             ),
             // İkinci satır - Tüm sayfalara ekle butonu
             Container(
@@ -137,11 +158,13 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
                   }
                   if (context.mounted) Navigator.pop(context);
                 },
-                child: const Text(
-                  "Bu imzayı bütün sayfalara ekle",
-                  style: TextStyle(
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
+                child: FittedBox(
+                  child: const Text(
+                    "Bu imzayı bütün sayfalara ekle",
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),

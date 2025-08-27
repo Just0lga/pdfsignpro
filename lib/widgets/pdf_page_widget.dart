@@ -268,9 +268,13 @@ class _PdfPageWidgetState extends ConsumerState<PdfPageWidget> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           color: Colors.black54,
-          child: Text(
-            'Sayfa ${widget.pageIndex + 1}',
-            style: const TextStyle(color: Colors.white),
+          child: Column(
+            children: [
+              Text(
+                'Sayfa ${widget.pageIndex + 1}',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
           ),
         ),
       );

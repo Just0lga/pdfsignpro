@@ -48,6 +48,45 @@ class PdfSignScreen extends ConsumerWidget {
               },
               icon: Icon(Icons.arrow_back_ios_new)),
         ),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: Colors.grey.shade300, width: 1),
+            ),
+          ),
+          child: SafeArea(
+            child: Container(
+              height: 60,
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ElevatedButton.icon(
+                onPressed: pdfState.signatures.isEmpty
+                    ? null
+                    : () => _showClearAllSignaturesDialog(context, pdfNotifier),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 2,
+                ),
+                icon: Icon(
+                  Icons.clear_all,
+                  size: 24,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  'Tüm İmzaları Temizle',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
         body: WillPopScope(
             onWillPop: () async {
               Navigator.pushAndRemoveUntil(
@@ -354,8 +393,21 @@ class PdfSignScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
-            content: Text(
-                'PDF kaydetme hatası: Lütfen tekrar deneyiniz, internetinizi kontrol ediniz'),
+            content: Row(
+              children: [
+                Icon(
+                  Icons.wifi_off,
+                  color: Colors.white,
+                ),
+                SizedBox(
+                  width: 8,
+                ),
+                Expanded(
+                  child: Text(
+                      'PDF kaydetme hatası: Lütfen tekrar deneyiniz, internetinizi kontrol ediniz'),
+                ),
+              ],
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -381,4 +433,72 @@ class PdfSignScreen extends ConsumerWidget {
       }
     }
   }
+}
+
+// Tüm imzaları temizle onay dialog'u
+void _showClearAllSignaturesDialog(BuildContext context, PdfNotifier notifier) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.warning, color: Colors.red, size: 28),
+          SizedBox(width: 8),
+          Text(
+            'Dikkat!',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+        ],
+      ),
+      content: Text(
+        'Bu oturumdaki tüm imzalar silinecek.\nBu işlem geri alınamaz.\n\nDevam etmek istediğinizden emin misiniz?',
+        style: TextStyle(fontSize: 16),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'İptal',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            notifier.clearAllSignatures();
+            Navigator.pop(context);
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Tüm imzalar başarıyla temizlendi'),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(
+            'Tümünü Sil',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ),
+  );
 }

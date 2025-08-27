@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdfsignpro/helpers/has_internet.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
@@ -385,14 +386,18 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       color: Color(0xFF112b66).withOpacity(0.1),
       padding: const EdgeInsets.all(12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, // sola hizala
         children: [
           Row(
             children: [
               const Icon(Icons.person, size: 20),
               const SizedBox(width: 4),
-              Text(
-                'Kullanıcı: ${selectedFtpConnection?.uname}',
-                style: const TextStyle(fontSize: 13),
+              Expanded(
+                child: Text(
+                  'Kullanıcı: ${selectedFtpConnection?.uname}',
+                  style: const TextStyle(fontSize: 13),
+                  overflow: TextOverflow.ellipsis, // taşarsa ... koyar
+                ),
               ),
             ],
           ),
@@ -415,6 +420,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                     color: _hasInternetConnection ? Colors.green : Colors.red,
                     fontStyle: FontStyle.italic,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -424,12 +430,15 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
             children: [
               const Icon(Icons.sort, size: 20, color: Color(0xFF112b66)),
               const SizedBox(width: 4),
-              Text(
-                'Dosyalar tarihe göre sıralandı (En yeni önce)',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF112b66),
-                  fontStyle: FontStyle.italic,
+              Expanded(
+                child: Text(
+                  'Dosyalar tarihe göre sıralandı (En yeni önce)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF112b66),
+                    fontStyle: FontStyle.italic,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -530,12 +539,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                       icon: const Icon(Icons.refresh),
                       label: const Text('Yenile'),
                     ),
-                    SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: _uploadTestPdf,
-                      icon: const Icon(Icons.upload),
-                      label: const Text('Test PDF'),
-                    ),
                   ],
                 ),
               ],
@@ -552,59 +555,62 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               final file = files[index];
               final isPdf = file.name.toLowerCase().endsWith('.pdf');
 
-              return Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: Color(0xFF112b66)),
-                ),
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Column(
-                  children: [
-                    ListTile(
-                      subtitle: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            flex: 10,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  file.name,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w500),
-                                ),
-                                Text(
-                                  'Boyut: ${file.sizeFormatted}',
-                                  style: TextStyle(color: Color(0xFF112b66)),
-                                ),
-                                if (file.modifyTime != null)
+              return GestureDetector(
+                onTap: isPdf ? () => _downloadAndOpenPdf(file) : null,
+                child: Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Color(0xFF112b66)),
+                  ),
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        subtitle: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              flex: 10,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    'Tarih: ${DateFormat('d MMMM y HH:mm', 'tr_TR').format(file.modifyTime!.add(Duration(hours: 3)))}',
-                                    style: TextStyle(
-                                      color: Color(0xFF112b66),
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                    file.name,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w500),
                                   ),
-                              ],
+                                  Text(
+                                    'Boyut: ${file.sizeFormatted}',
+                                    style: TextStyle(color: Color(0xFF112b66)),
+                                  ),
+                                  if (file.modifyTime != null)
+                                    Text(
+                                      'Tarih: ${DateFormat('d MMMM y HH:mm', 'tr_TR').format(file.modifyTime!.add(Duration(hours: 3)))}',
+                                      style: TextStyle(
+                                        color: Color(0xFF112b66),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Icon(
-                              Icons.picture_as_pdf,
-                              color: Color(0xFF112b66),
-                              size: 36,
+                            Expanded(
+                              flex: 2,
+                              child: Icon(
+                                Icons.picture_as_pdf,
+                                color: Color(0xFF112b66),
+                                size: 36,
+                              ),
                             ),
-                          )
-                        ],
+                          ],
+                        ),
+                        isThreeLine: file.modifyTime != null,
                       ),
-                      isThreeLine: file.modifyTime != null,
-                      onTap: isPdf ? () => _downloadAndOpenPdf(file) : null,
-                    ),
-                    if (isPdf) _buildSignatureBoxes(file),
-                    const SizedBox(height: 8),
-                  ],
+                      if (isPdf) _buildSignatureBoxes(file),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               );
             },
@@ -794,6 +800,30 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   Future<void> _downloadAndOpenPdf(FtpFile file) async {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
+    bool internetVar = await hasInternet();
+
+    // ✅ İnternet yoksa işlemi sonlandır
+    if (internetVar == false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: [
+              Icon(
+                Icons.wifi_off,
+                color: Colors.white,
+              ),
+              SizedBox(width: 8),
+              Text('İnternet bağlantınızı kontrol ediniz'),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return; // ✅ İşlemi sonlandır
+    }
 
     showDialog(
       context: context,

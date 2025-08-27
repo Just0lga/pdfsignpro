@@ -249,4 +249,9 @@ class PdfNotifier extends StateNotifier<PdfState> {
 
     return existingIndexes;
   }
+
+  // Tüm imzaları temizle
+  void clearAllSignatures() {
+    state = state.copyWith(signatures: {});
+  }
 }

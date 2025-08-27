@@ -155,7 +155,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
       if (errorMessage.contains("API'ye erişilemiyor")) {
         errorMessage =
-            "Sunucuya bağlanılamıyor.\nİnternet bağlantınızı kontrol edin.";
+            "Kullanıcı adı veya şifre hatalı.\nİnternet bağlantınızı kontrol edin.";
       } else if (errorMessage.contains("Kullanıcı adı veya şifre")) {
         errorMessage =
             "Kullanıcı adı veya şifre hatalı.\nLütfen bilgilerinizi kontrol edin.";
