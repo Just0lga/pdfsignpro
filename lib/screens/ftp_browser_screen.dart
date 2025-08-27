@@ -386,23 +386,15 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          const Icon(Icons.person, size: 20),
-          const SizedBox(width: 4),
-          Text(
-            'Kullanıcı: ${selectedFtpConnection?.uname}',
-            style: const TextStyle(fontSize: 13),
-          ),
-          Text(
-            'Kullanıcı: ${selectedFtpConnection?.host}',
-            style: const TextStyle(fontSize: 13),
-          ),
-          Text(
-            'Kullanıcı: ${selectedFtpConnection?.pass}',
-            style: const TextStyle(fontSize: 13),
-          ),
-          Text(
-            'Kullanıcı: ${selectedFtpConnection?.port}',
-            style: const TextStyle(fontSize: 13),
+          Row(
+            children: [
+              const Icon(Icons.person, size: 20),
+              const SizedBox(width: 4),
+              Text(
+                'Kullanıcı: ${selectedFtpConnection?.uname}',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Row(
