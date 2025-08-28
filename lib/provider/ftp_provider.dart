@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/services/auth_service.dart';
 import '../models/backend_models/perm.dart';
-import '../provider/auth_provider.dart';
+import 'auth_provider.dart';
 import '../services/ftp_pdf_loader.dart';
 import '../models/frontend_models/ftp_file.dart';
 
@@ -75,12 +75,7 @@ final ftpConnectionStatusProvider = Provider<FtpConnectionStatus>((ref) {
 });
 
 // FTP bağlantı durumu enum
-enum FtpConnectionStatus {
-  notLoggedIn,
-  noPermission,
-  incompleteConfig,
-  ready,
-}
+enum FtpConnectionStatus { notLoggedIn, noPermission, incompleteConfig, ready }
 
 // FTP bağlantı detayları provider
 final ftpConnectionDetailsProvider = Provider<FtpConnectionDetails?>((ref) {

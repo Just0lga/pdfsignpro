@@ -147,38 +147,47 @@ class PdfSignScreen extends ConsumerWidget {
       );
     }
 
-    // PDF yoksa hata göster
     if (state.pdfBytes == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red),
-            SizedBox(height: 16),
-            Text(
-              'PDF Bulunamadı',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      return FutureBuilder(
+        future: Future.delayed(Duration(milliseconds: 500)),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(
+              child: CircularProgressIndicator(), // veya boş Container()
+            );
+          }
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.red),
+                SizedBox(height: 16),
+                Text(
+                  'PDF Bulunamadı',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'İmzalanacak PDF dosyası bulunamadı',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
+                  ),
+                  label: Text('Geri Dön'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF112b66),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 8),
-            Text(
-              'İmzalanacak PDF dosyası bulunamadı',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context),
-              icon: Icon(
-                Icons.arrow_back,
-                color: Colors.white,
-              ),
-              label: Text('Geri Dön'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF112b66),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       );
     }
 
