@@ -8,8 +8,8 @@ import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
 import 'package:pdfsignpro/screens/login_screen.dart';
 import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
-import 'package:pdfsignpro/services/local_pdf_loader.dart';
-import 'package:pdfsignpro/services/asset_pdf_loader.dart';
+import 'package:pdfsignpro/services/local_pdf_loader_service.dart';
+import 'package:pdfsignpro/services/asset_pdf_loader_service.dart';
 import 'package:pdfsignpro/services/preference_service.dart';
 import '../models/backend_models/perm.dart';
 
@@ -45,12 +45,15 @@ class _PdfSourceSelectionScreenState
         authState.fullResponse!.perList.isNotEmpty) {
       print('✅ Mevcut veriler kullanılıyor - API çağrısı yapmıyoruz');
 
+      // ignore: unused_local_variable
       final ftpCount = authState.fullResponse!.perList
           .where((p) => p.permtype == 'ftp' && p.ap == 1)
           .length;
+      // ignore: unused_local_variable
       final localCount = authState.fullResponse!.perList
           .where((p) => p.type == 'local' && p.ap == 1)
           .length;
+      // ignore: unused_local_variable
       final assetCount = authState.fullResponse!.perList
           .where((p) => p.type == 'asset' && p.ap == 1)
           .length;
@@ -107,12 +110,15 @@ class _PdfSourceSelectionScreenState
       if (success) {
         final currentState = ref.read(authProvider);
         if (currentState.fullResponse != null) {
+          // ignore: unused_local_variable
           final ftpCount = currentState.fullResponse!.perList
               .where((p) => p.permtype == 'ftp' && p.ap == 1)
               .length;
+          // ignore: unused_local_variable
           final localCount = currentState.fullResponse!.perList
               .where((p) => p.type == 'local' && p.ap == 1)
               .length;
+          // ignore: unused_local_variable
           final assetCount = currentState.fullResponse!.perList
               .where((p) => p.type == 'asset' && p.ap == 1)
               .length;
@@ -660,7 +666,7 @@ class _PdfSourceSelectionScreenState
 
     print('🔄 Local PDF loading başlatılıyor...');
 
-    notifier.loadPdf(LocalPdfLoader()).then((_) {
+    notifier.loadPdf(LocalPdfLoaderService()).then((_) {
       print('✅ Local PDF loading tamamlandı');
 
       if (context.mounted) {
@@ -708,7 +714,7 @@ class _PdfSourceSelectionScreenState
 
     print('🔄 Asset PDF loading başlatılıyor...');
 
-    notifier.loadPdf(AssetPdfLoader('assets/sample.pdf')).then((_) {
+    notifier.loadPdf(AssetPdfLoaderService('assets/sample.pdf')).then((_) {
       print('✅ Asset PDF loading tamamlandı');
 
       if (context.mounted) {

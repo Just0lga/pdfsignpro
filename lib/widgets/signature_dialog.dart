@@ -22,6 +22,7 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
   late final SignatureController _controller;
   late final String _key;
 
+  // ignore: unused_field
   Future<Uint8List?>? _renderFuture;
 
   @override

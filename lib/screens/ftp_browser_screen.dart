@@ -11,7 +11,7 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/frontend_models/ftp_file.dart';
-import '../services/ftp_pdf_loader.dart';
+import '../services/ftp_pdf_loader_service.dart';
 
 class FtpBrowserScreen extends ConsumerStatefulWidget {
   const FtpBrowserScreen({Key? key}) : super(key: key);
@@ -155,14 +155,14 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
       // Future'ı oluştur ve state'e kaydet
       _ftpFilesFuture = _showAllFiles
-          ? FtpPdfLoader.listAllFiles(
+          ? FtpPdfLoaderService.listAllFiles(
               host: selectedFtpConnection?.host ?? "",
               username: selectedFtpConnection?.uname ?? "",
               password: selectedFtpConnection?.pass ?? "",
               directory: "/",
               port: selectedFtpConnection?.port ?? 21,
             )
-          : FtpPdfLoader.listPdfFiles(
+          : FtpPdfLoaderService.listPdfFiles(
               host: selectedFtpConnection?.host ?? "",
               username: selectedFtpConnection?.uname ?? "",
               password: selectedFtpConnection?.pass ?? "",
@@ -196,7 +196,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
 
     try {
-      final files = await FtpPdfLoader.listPdfFiles(
+      final files = await FtpPdfLoaderService.listPdfFiles(
         host: selectedFtpConnection?.host ?? "",
         username: selectedFtpConnection?.uname ?? "",
         password: selectedFtpConnection?.pass ?? "",
@@ -721,6 +721,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
   }
 
+  // ignore: unused_element, it is for testing
   Future<void> _uploadTestPdf() async {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
 
@@ -745,7 +746,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         ),
       );
 
-      final success = await FtpPdfLoader.uploadPdfToFtp(
+      final success = await FtpPdfLoaderService.uploadPdfToFtp(
           host: selectedFtpConnection?.host ?? "",
           username: selectedFtpConnection?.uname ?? "",
           password: selectedFtpConnection?.pass ?? "",
@@ -857,7 +858,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
 
     try {
-      final loader = FtpPdfLoader(
+      final loader = FtpPdfLoaderService(
         host: selectedFtpConnection?.host ?? "",
         username: selectedFtpConnection?.uname ?? "",
         password: selectedFtpConnection?.pass ?? "",

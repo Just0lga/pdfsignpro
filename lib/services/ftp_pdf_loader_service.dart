@@ -8,14 +8,14 @@ import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import '../models/frontend_models/ftp_file.dart';
 import 'pdf_loader_service.dart';
 
-class FtpPdfLoader implements PdfLoaderService {
+class FtpPdfLoaderService implements PdfLoaderService {
   final String host;
   final String username;
   final String password;
   final String filePath;
   final int port;
 
-  FtpPdfLoader({
+  FtpPdfLoaderService({
     required this.host,
     required this.username,
     required this.password,

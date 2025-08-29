@@ -118,7 +118,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (success) {
       final validFtpPermissions = authNotifier.getFtpPermissions();
-      final authState = ref.read(authProvider);
 
       // Cache durumunu kontrol et
       final cacheStatus = await authNotifier.getCacheStatus();

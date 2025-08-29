@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_null_comparison
+
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;

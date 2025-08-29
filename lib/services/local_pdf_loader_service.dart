@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'pdf_loader_service.dart';
 
-class LocalPdfLoader implements PdfLoaderService {
+class LocalPdfLoaderService implements PdfLoaderService {
   @override
   Future<Uint8List?> loadPdf() async {
     print('📁 File picker açılıyor...');

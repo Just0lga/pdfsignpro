@@ -1,10 +1,9 @@
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'pdf_loader_service.dart';
 
-class AssetPdfLoader implements PdfLoaderService {
+class AssetPdfLoaderService implements PdfLoaderService {
   final String assetPath;
-  AssetPdfLoader(this.assetPath);
+  AssetPdfLoaderService(this.assetPath);
 
   @override
   Future<Uint8List?> loadPdf() async {

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/services/auth_service.dart';
 import '../models/backend_models/perm.dart';
 import 'auth_provider.dart';
-import '../services/ftp_pdf_loader.dart';
+import '../services/ftp_pdf_loader_service.dart';
 import '../models/frontend_models/ftp_file.dart';
 
 // Aktif FTP bağlantısı seçici provider
@@ -39,7 +39,7 @@ final ftpFilesProvider = FutureProvider<List<FtpFile>>((ref) async {
   }
 
   try {
-    return await FtpPdfLoader.listPdfFiles(
+    return await FtpPdfLoaderService.listPdfFiles(
       host: selectedConnection.host!,
       username: selectedConnection.uname!,
       password: selectedConnection.pass!,

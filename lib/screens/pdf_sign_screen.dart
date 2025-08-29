@@ -7,7 +7,7 @@ import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:printing/printing.dart';
-import '../services/ftp_pdf_loader.dart';
+import '../services/ftp_pdf_loader_service.dart';
 import '../widgets/pdf_page_widget.dart';
 import '../widgets/signature_dialog.dart';
 
@@ -279,7 +279,7 @@ class PdfSignScreen extends ConsumerWidget {
       final String fileName = '${result['fileName']}.pdf';
 
       // Dosya var mı kontrol et
-      final existingFiles = await FtpPdfLoader.listPdfFiles(
+      final existingFiles = await FtpPdfLoaderService.listPdfFiles(
         host: connectionDetails.host,
         username: connectionDetails.username,
         password: connectionDetails.password,
@@ -361,7 +361,7 @@ class PdfSignScreen extends ConsumerWidget {
         );
       }
 
-      final success = await FtpPdfLoader.uploadPdfToFtp(
+      final success = await FtpPdfLoaderService.uploadPdfToFtp(
         host: connectionDetails.host,
         username: connectionDetails.username,
         password: connectionDetails.password,
