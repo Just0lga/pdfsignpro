@@ -89,8 +89,6 @@ class _PdfSourceSelectionScreenState
 
       if (username == null || rawPassword == null) {
         print('Credentials eksik - yenileme yapılamıyor');
-        _showApiMessage('Giriş bilgileri bulunamadı - Tekrar giriş yapın',
-            Colors.red, Icons.error);
         return;
       }
 
