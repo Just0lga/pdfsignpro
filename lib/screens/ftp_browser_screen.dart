@@ -8,7 +8,6 @@ import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:pdfsignpro/turkish.dart';
 import 'package:pdfsignpro/widgets/user_pass_request_dialog.dart';
 import '../models/frontend_models/ftp_file.dart';
 import '../services/ftp_pdf_loader_service.dart';
@@ -292,12 +291,9 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     }
   }
 
-  // Folder navigation metodları - DÜZELTME: Türkçe karakter destekli
+  // Folder navigation metodları
   void _navigateToDirectory(FtpFile directory) {
     if (!directory.isDirectory) return;
-
-    print('🔄 Klasöre navigasyon: "${directory.name}"');
-    print('   Orijinal path: "${directory.path}"');
 
     setState(() {
       _currentDirectory = directory.path;
@@ -305,71 +301,33 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         _directoryHistory.add(directory.path);
       }
     });
-
-    print('   Yeni mevcut directory: "$_currentDirectory"');
-    print('   Directory history: $_directoryHistory');
-
     _checkConnectionAndList();
   }
 
   void _goBack() {
-    print('🔙 Geri gitme işlemi başlıyor');
-    print('   Mevcut directory: "$_currentDirectory"');
-    print('   Directory history: $_directoryHistory');
-
     if (_currentDirectory != '/' && _directoryHistory.length > 1) {
       _directoryHistory.removeLast();
       setState(() {
         _currentDirectory = _directoryHistory.last;
       });
-      print('   History\'den geri gidildi: "$_currentDirectory"');
+      _checkConnectionAndList();
     } else if (_currentDirectory != '/') {
-      // Fallback: parent directory'ye git - Türkçe karakter desteği ile
-      String parentDir = _getParentDirectory(_currentDirectory);
+      // Fallback: parent directory'ye git
+      String parentDir =
+          _currentDirectory.substring(0, _currentDirectory.lastIndexOf('/'));
+      if (parentDir.isEmpty) parentDir = '/';
       setState(() {
         _currentDirectory = parentDir;
         _directoryHistory = ['/'];
         if (parentDir != '/') _directoryHistory.add(parentDir);
       });
-      print('   Parent directory\'ye gidildi: "$_currentDirectory"');
+      _checkConnectionAndList();
     }
-
-    _checkConnectionAndList();
   }
 
-  // Yeni yardımcı metod: Parent directory hesaplama
-  String _getParentDirectory(String currentPath) {
-    if (currentPath == '/' || currentPath.isEmpty) {
-      return '/';
-    }
-
-    // Son slash'i kaldır
-    String cleanPath = currentPath.endsWith('/')
-        ? currentPath.substring(0, currentPath.length - 1)
-        : currentPath;
-
-    // Son klasör adını kaldır
-    int lastSlashIndex = cleanPath.lastIndexOf('/');
-
-    if (lastSlashIndex <= 0) {
-      return '/'; // Root'a dön
-    }
-
-    String parentPath = cleanPath.substring(0, lastSlashIndex);
-
-    if (parentPath.isEmpty) {
-      return '/';
-    }
-
-    return parentPath;
-  }
-
-  // DÜZELTME: Breadcrumb navigation widget
-  // ftp_browser_screen.dart içindeki _buildBreadcrumbNavigation metodunun düzeltilmiş versiyonu
-
+  // Breadcrumb navigation widget
   Widget _buildBreadcrumbNavigation() {
-    print("🍞 Breadcrumb için current directory: $_currentDirectory");
-
+    print("OOO $_currentDirectory");
     List<String> pathParts =
         _currentDirectory.split('/').where((s) => s.isNotEmpty).toList();
 
@@ -377,99 +335,42 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          // Root directory butonu
           GestureDetector(
             onTap: () {
-              print('🏠 Root\'a dönülüyor');
               setState(() {
                 _currentDirectory = '/';
                 _directoryHistory = ['/'];
               });
               _checkConnectionAndList();
             },
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.home, color: Colors.white, size: 16),
-                  SizedBox(width: 4),
-                  Text("FTP",
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
+            child: Text("FTP PDF Listesi",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
-
-          // Path parts - HER PART İÇİN DECODE İŞLEMİ
           ...pathParts.asMap().entries.map((entry) {
             int index = entry.key;
             String part = entry.value;
 
-            // ✅ ÖNEMLİ DÜZELTME: Her path part'ını decode et
-            String displayPart = TurkishCharacterDecoder.decodeFileName(part);
-
-            print(
-                '🔗 Breadcrumb part [$index]: "$part" -> decoded: "$displayPart"');
-
             return Row(
               children: [
-                // Separator
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    Icons.chevron_right,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-
-                // Folder name - DECODE EDİLMİŞ ADI GÖSTER
                 GestureDetector(
                   onTap: () {
-                    // ✅ DÜZELTME: Orijinal encoded path'i kullan, decode edilmiş değil
                     String targetPath =
                         '/' + pathParts.sublist(0, index + 1).join('/');
-
-                    print(
-                        '🔗 Breadcrumb tıklandı: decoded="$displayPart", target="$targetPath"');
-
                     setState(() {
                       _currentDirectory = targetPath;
-                      // History'yi yeniden oluştur
-                      _directoryHistory = ['/'];
-
-                      // Her seviye için path ekle (orijinal encoded formda)
-                      String buildingPath = '';
-                      for (int i = 0; i <= index; i++) {
-                        buildingPath = buildingPath.isEmpty
-                            ? '/' + pathParts[i]
-                            : buildingPath + '/' + pathParts[i];
-
-                        if (!_directoryHistory.contains(buildingPath)) {
-                          _directoryHistory.add(buildingPath);
-                        }
-                      }
+                      _directoryHistory = _directoryHistory
+                          .where((path) =>
+                              targetPath.startsWith(path) || path == '/')
+                          .toList();
                     });
                     _checkConnectionAndList();
                   },
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      displayPart, // ✅ DECODE EDİLMİŞ ADI GÖSTER
+                  child: Text("",
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -648,7 +549,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           children: [
             _buildConnectionInfo(),
             Expanded(
-              child: _buildFileList(), // DÜZELTME: Doğru metod adı
+              child: _buildFileList(),
             ),
           ],
         ),
@@ -656,26 +557,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
   }
 
-// ftp_browser_screen.dart içindeki _buildConnectionInfo metodunun düzeltilmiş versiyonu
-
   Widget _buildConnectionInfo() {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
-    final credentials = ref.watch(activeFtpCredentialsProvider);
+    final credentials = ref.watch(activeFtpCredentialsProvider); // ✅ YENİ
 
     // ✅ Güncel username'i göster
     final displayUsername = credentials?['username'] ?? 'Belirtilmemiş';
-
-    // ✅ YENİ: Current directory'yi decode ederek göster
-    String displayDirectory = _currentDirectory;
-    if (_currentDirectory != '/') {
-      // Path'i parçalara böl ve her parçayı decode et
-      List<String> pathParts =
-          _currentDirectory.split('/').where((s) => s.isNotEmpty).toList();
-      List<String> decodedParts = pathParts
-          .map((part) => TurkishCharacterDecoder.decodeFileName(part))
-          .toList();
-      displayDirectory = '/' + decodedParts.join('/');
-    }
 
     return Container(
       color: Color(0xFF112b66).withOpacity(0.1),
@@ -727,7 +614,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Dizin: $displayDirectory', // ✅ DECODE EDİLMİŞ DIRECTORY
+                  'Dizin: $_currentDirectory',
                   style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFF112b66),
@@ -743,7 +630,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
   }
 
-  // DÜZELTME: Ana dosya listesi widget'ı
   Widget _buildFileList() {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
 
@@ -838,79 +724,72 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
             itemCount: files.length,
             itemBuilder: (context, index) {
               final file = files[index];
-              return _buildFileListCard(
-                  file, index); // Her dosya için card oluştur
+
+              return GestureDetector(
+                onTap: file.isDirectory
+                    ? () => _navigateToDirectory(file)
+                    : (file.name.toLowerCase().endsWith('.pdf')
+                        ? () => _downloadAndOpenPdf(file)
+                        : null),
+                child: Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Color(0xFF112b66)),
+                  ),
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Icon(
+                            file.isDirectory
+                                ? Icons.folder
+                                : Icons.picture_as_pdf,
+                            color: file.isDirectory
+                                ? Colors.amber
+                                : Color(0xFF112b66),
+                            size: 36,
+                          ),
+                        ),
+                        title: Text(
+                          file.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              file.isDirectory
+                                  ? 'Klasör'
+                                  : 'Boyut: ${file.sizeFormatted}',
+                              style: TextStyle(color: Color(0xFF112b66)),
+                            ),
+                            if (file.modifyTime != null)
+                              Text(
+                                'Tarih: ${DateFormat('d MMMM y HH:mm', 'tr_TR').format(file.modifyTime!.add(Duration(hours: 3)))}',
+                                style: TextStyle(
+                                  color: Color(0xFF112b66),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                        isThreeLine: file.modifyTime != null,
+                      ),
+                      if (!file.isDirectory &&
+                          file.name.toLowerCase().endsWith('.pdf'))
+                        _buildSignatureBoxes(file),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              );
             },
           ),
         );
       },
-    );
-  }
-
-  // DÜZELTME: Dosya kartını oluşturan metod
-  Widget _buildFileListCard(FtpFile file, int index) {
-    return GestureDetector(
-      onTap: file.isDirectory
-          ? () {
-              print('🗂️ Klasöre tıklandı: "${file.name}"');
-              print('   Klasör path: "${file.path}"');
-              _navigateToDirectory(file);
-            }
-          : (file.name.toLowerCase().endsWith('.pdf')
-              ? () {
-                  print('📄 PDF\'e tıklandı: "${file.name}"');
-                  print('   PDF path: "${file.path}"');
-                  _downloadAndOpenPdf(file);
-                }
-              : null),
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: Color(0xFF112b66)),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          children: [
-            ListTile(
-              leading: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Icon(
-                  file.isDirectory ? Icons.folder : Icons.picture_as_pdf,
-                  color: file.isDirectory ? Colors.amber : Color(0xFF112b66),
-                  size: 36,
-                ),
-              ),
-              title: Text(
-                file.name, // Decode edilmiş ad gösteriliyor
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    file.isDirectory
-                        ? 'Klasör'
-                        : 'Boyut: ${file.sizeFormatted}',
-                    style: TextStyle(color: Color(0xFF112b66)),
-                  ),
-                  if (file.modifyTime != null)
-                    Text(
-                      'Tarih: ${DateFormat('d MMMM y HH:mm', 'tr_TR').format(file.modifyTime!.add(Duration(hours: 3)))}',
-                      style: TextStyle(
-                        color: Color(0xFF112b66),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                ],
-              ),
-              isThreeLine: file.modifyTime != null,
-            ),
-            if (!file.isDirectory && file.name.toLowerCase().endsWith('.pdf'))
-              _buildSignatureBoxes(file),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
     );
   }
 
