@@ -85,8 +85,6 @@ class _UserPassRequestDialogState extends ConsumerState<UserPassRequestDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Server: ${widget.serverName}'),
-                    Text('Host: ${widget.host}'),
-                    Text('Port: ${widget.port}'),
                   ],
                 ),
               ),
