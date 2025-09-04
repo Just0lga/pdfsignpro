@@ -5,40 +5,169 @@ class TurkishCharacterDecoder {
   static String decodeFileName(String fileName) {
     print('🔄 Decode başlangıcı: "$fileName"');
 
+    // Önce hızlı kontrol - zaten Türkçe karakterler düzgünse dokunma
+    if (_isTurkishTextClean(fileName)) {
+      print('✅ Türkçe metin zaten temiz: "$fileName"');
+      return fileName;
+    }
+
     List<String> attempts = [];
 
     // 1. Orijinal dosya adı
     attempts.add(fileName);
 
-    // 2. Windows-1254 (Türkçe) decode
+    // 2. Agresif manuel patterns (en yaygın FTP sorunları)
+    String aggressiveResult = _tryAggressivePatternDecode(fileName);
+    if (aggressiveResult != fileName) attempts.add(aggressiveResult);
+
+    // 3. Windows-1254 (Türkçe) decode
     String windows1254Result = _tryWindows1254Decode(fileName);
     if (windows1254Result != fileName) attempts.add(windows1254Result);
 
-    // 3. ISO-8859-9 (Latin-5 Türkçe) decode
+    // 4. ISO-8859-9 (Latin-5 Türkçe) decode
     String iso88599Result = _tryISO88599Decode(fileName);
     if (iso88599Result != fileName) attempts.add(iso88599Result);
 
-    // 4. CP1252 (Windows Latin) decode
+    // 5. CP1252 (Windows Latin) decode
     String cp1252Result = _tryCP1252Decode(fileName);
     if (cp1252Result != fileName) attempts.add(cp1252Result);
 
-    // 5. Byte-by-byte manual decode
+    // 6. Byte-by-byte manual decode
     String manualResult = _tryManualDecode(fileName);
     if (manualResult != fileName) attempts.add(manualResult);
 
-    // 6. UTF-8 malformed repair
+    // 7. UTF-8 malformed repair
     String utf8Result = _tryUTF8Repair(fileName);
     if (utf8Result != fileName) attempts.add(utf8Result);
 
-    // 7. URL decode denemeleri
+    // 8. URL decode denemeleri
     String urlResult = _tryURLDecode(fileName);
     if (urlResult != fileName) attempts.add(urlResult);
+
+    // 9. Latin-1 byte decode (FTP'de yaygın)
+    String latin1Result = _tryLatin1ByteDecode(fileName);
+    if (latin1Result != fileName) attempts.add(latin1Result);
 
     // En iyi sonucu seç
     String bestResult = _selectBestResult(attempts);
     print('✅ En iyi sonuç: "$bestResult"');
 
     return bestResult;
+  }
+
+  // Yeni: Türkçe metnin temiz olup olmadığını kontrol et
+  static bool _isTurkishTextClean(String text) {
+    // Türkçe karakterler mevcut ve bozuk karakter yok
+    final turkishChars = RegExp(r'[çğıöşüÇĞIİÖŞÜ]');
+    final badChars = RegExp(r'[ÄÅÃ�]');
+
+    bool hasTurkish = turkishChars.hasMatch(text);
+    bool hasBadChars = badChars.hasMatch(text);
+
+    return hasTurkish && !hasBadChars;
+  }
+
+  // Yeni: Agresif pattern matching (en yaygın FTP sorunları için)
+  static String _tryAggressivePatternDecode(String input) {
+    String result = input;
+
+    // En yaygın FTP encoding sorunları - spesifik patterns
+    final Map<String, String> aggressivePatterns = {
+      // Tam kelime patterns
+      'gÃ¼iÅÃ§Ã¶': 'güişçö',
+      'gÃ¼ÄÅÃ§Ã¶': 'güışçö',
+      'TahsÄÂ±lat': 'Tahsilat',
+      'Ã\u0096rnek': 'Örnek',
+      'belÃ\u00BCt': 'belüt',
+      'Ã¼Ã§': 'üç',
+      'Ä±ÅÃ§': 'ışç',
+      'gÃ¼': 'gü',
+      'ÄÅ': 'ış',
+      'Ã§Ã¶': 'çö',
+
+      // Tek karakter sorunları
+      'Ã¼': 'ü',
+      'Ã§': 'ç',
+      'Ã¶': 'ö',
+      'ÄŸ': 'ğ',
+      'Ä±': 'ı',
+      'Åž': 'Ş',
+      'Å': 'ş',
+      'Ä°': 'İ',
+      'Ã‡': 'Ç',
+      'Ã–': 'Ö',
+      'Ãœ': 'Ü',
+      'Ä': 'ğ',
+
+      // Özel byte sequences
+      '\u00C3\u00BC': 'ü',
+      '\u00C3\u00A7': 'ç',
+      '\u00C3\u00B6': 'ö',
+      '\u00C4\u009F': 'ğ',
+      '\u00C4\u00B1': 'ı',
+      '\u00C5\u009F': 'ş',
+
+      // Hexadecimal
+      'Ãü': 'ü',
+      'Ã§': 'ç',
+      'Ã¶': 'ö',
+    };
+
+    // En uzun pattern'ler önce işlensin
+    List<String> sortedKeys = aggressivePatterns.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+
+    for (String pattern in sortedKeys) {
+      if (result.contains(pattern)) {
+        String oldResult = result;
+        result = result.replaceAll(pattern, aggressivePatterns[pattern]!);
+        if (result != oldResult) {
+          print(
+              '   Agresif pattern: "$pattern" -> "${aggressivePatterns[pattern]}"');
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // Yeni: Latin-1 byte düzeyinde decode
+  static String _tryLatin1ByteDecode(String input) {
+    try {
+      List<int> bytes = [];
+
+      // String'i byte array'e çevir
+      for (int i = 0; i < input.length; i++) {
+        int code = input.codeUnitAt(i);
+        bytes.add(code > 255 ? code & 0xFF : code);
+      }
+
+      // Latin-1 olarak decode et, sonra UTF-8 olarak yorumla
+      String latin1String = latin1.decode(bytes);
+
+      // Türkçe karakter mapping
+      final Map<String, String> latin1TurkishMap = {
+        'ÃŸ': 'ş',
+        'Ã°': 'ğ',
+        'Ãœ': 'Ü',
+        'Ã¼': 'ü',
+        'Ã§': 'ç',
+        'Ã‡': 'Ç',
+        'Ã¶': 'ö',
+        'Ã–': 'Ö',
+        'Ä±': 'ı',
+        'Ä°': 'İ',
+      };
+
+      String result = latin1String;
+      latin1TurkishMap.forEach((key, value) {
+        result = result.replaceAll(key, value);
+      });
+
+      return result;
+    } catch (e) {
+      return input;
+    }
   }
 
   // Windows-1254 (Türkçe) karakter seti decode
@@ -305,11 +434,11 @@ class TurkishCharacterDecoder {
     return best;
   }
 
-  // Türkçe karakter kalitesi skorlama
+  // Geliştirilmiş Türkçe karakter kalitesi skorlama
   static int _calculateTurkishScore(String text) {
     int score = 0;
 
-    // Türkçe karakterler +3 puan
+    // Türkçe karakterler +5 puan (artırıldı)
     final turkishChars = [
       'ı',
       'ş',
@@ -325,27 +454,39 @@ class TurkishCharacterDecoder {
       'Ğ'
     ];
     for (String char in turkishChars) {
-      score += char.allMatches(text).length * 3;
+      score += char.allMatches(text).length * 5;
     }
 
-    // Normal karakterler +1 puan
+    // Normal ASCII karakterler +1 puan
     for (int i = 0; i < text.length; i++) {
       int code = text.codeUnitAt(i);
-      if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
+      if ((code >= 65 && code <= 90) ||
+          (code >= 97 && code <= 122) ||
+          (code >= 48 && code <= 57)) {
         score += 1;
       }
     }
 
-    // Kötü karakterler -5 puan
-    final badChars = ['Ä', 'Å', 'Ã', '�', '', '\uFFFD'];
+    // Kötü karakterler -10 puan (artırıldı)
+    final badChars = ['Ä', 'Å', 'Ã', '�', '', '\uFFFD', '?'];
     for (String char in badChars) {
-      score -= char.allMatches(text).length * 5;
+      score -= char.allMatches(text).length * 10;
     }
 
-    // Garip byte sequences -3 puan
-    if (text.contains(RegExp(r'[^\x00-\x7F\u00C0-\u017F\u0100-\u024F]'))) {
-      score -= 3;
+    // Çok uzun veya çok kısa metinler için ceza
+    if (text.length < 2) score -= 5;
+    if (text.length > 50) score -= 3;
+
+    // Sadece ASCII karakterler varsa bonus (doğru decode'lanmış olabilir)
+    bool hasOnlyAsciiAndTurkish = true;
+    for (int i = 0; i < text.length; i++) {
+      int code = text.codeUnitAt(i);
+      if (code > 127 && !turkishChars.contains(text[i])) {
+        hasOnlyAsciiAndTurkish = false;
+        break;
+      }
     }
+    if (hasOnlyAsciiAndTurkish) score += 10;
 
     return score;
   }
@@ -361,6 +502,30 @@ class TurkishCharacterDecoder {
     }
   }
 
+  // Debug: Karakter kodları analizi - detaylı
+  static void analyzeCharacterCodes(String text, {String? label}) {
+    print('🔍 ${label ?? 'Karakter'} analizi: "$text"');
+    for (int i = 0; i < text.length && i < 20; i++) {
+      // İlk 20 karakter
+      int code = text.codeUnitAt(i);
+      String char = text[i];
+      String hex = code.toRadixString(16).padLeft(4, '0').toUpperCase();
+      String type = '';
+
+      if (code >= 65 && code <= 90)
+        type = ' (ASCII Büyük)';
+      else if (code >= 97 && code <= 122)
+        type = ' (ASCII Küçük)';
+      else if (code >= 48 && code <= 57)
+        type = ' (Rakam)';
+      else if ('çğıöşüÇĞIİÖŞÜ'.contains(char))
+        type = ' (Türkçe)';
+      else if (code > 127) type = ' (Non-ASCII)';
+
+      print('   [$i] "$char" = U+$hex ($code)$type');
+    }
+  }
+
   // Test fonksiyonu
   static void testDecoding() {
     List<String> testCases = [
@@ -369,6 +534,7 @@ class TurkishCharacterDecoder {
       'Ã¼Ã§Ã¼ncÃ¼_ÄŸÃ¼n.pdf',
       'test_Ä±Å_ç.pdf',
       'türkçe%20dosya.pdf',
+      'gÃ¼iÅÃ§Ã¶', // Özel test case
     ];
 
     print('🧪 Test başlangıcı:');
@@ -380,46 +546,58 @@ class TurkishCharacterDecoder {
     }
   }
 
-  // 🆕 FTP için özel encoding varyantları oluştur
+  // FTP için özel encoding varyantları oluştur
   static List<String> generateFtpEncodingVariants(String fileName) {
     List<String> variants = [];
 
-    // 1. Orijinal dosya adı
+    print('🔄 Encoding varyantları oluşturuluyor: "$fileName"');
+
+    // 1. Orijinal dosya/klasör adı (en yaygın)
     variants.add(fileName);
 
-    // 2. Ana decode fonksiyonu ile
+    // 2. Ana decode fonksiyonu ile tersten encode edilmiş
     String decoded = decodeFileName(fileName);
     if (decoded != fileName) {
       variants.add(decoded);
+      print('   Decode sonucu: "$decoded"');
     }
 
     // 3. Türkçe karakterler varsa ek encoding'ler
     if (fileName.contains(RegExp(r'[çğıöşüÇĞIİÖŞÜ]')) ||
         decoded.contains(RegExp(r'[çğıöşüÇĞIİÖŞÜ]'))) {
-      // UTF-8 → Latin-1 dönüşümü
+      // UTF-8 → Latin-1 dönüşümü (klasörler için çok kritik)
       try {
         List<int> utf8Bytes = utf8.encode(fileName);
         String latin1Str = latin1.decode(utf8Bytes, allowInvalid: true);
-        if (latin1Str != fileName) {
+        if (latin1Str != fileName && !variants.contains(latin1Str)) {
           variants.add(latin1Str);
+          print('   UTF8->Latin1: "$latin1Str"');
         }
-      } catch (e) {/* ignore */}
+      } catch (e) {
+        print('   UTF8->Latin1 hatası: $e');
+      }
 
-      // Decode edilmiş dosya için de UTF-8 → Latin-1
+      // Decode edilmiş için de UTF-8 → Latin-1
       if (decoded != fileName) {
         try {
           List<int> utf8Bytes = utf8.encode(decoded);
           String latin1Str = latin1.decode(utf8Bytes, allowInvalid: true);
-          if (latin1Str != decoded && latin1Str != fileName) {
+          if (latin1Str != decoded &&
+              latin1Str != fileName &&
+              !variants.contains(latin1Str)) {
             variants.add(latin1Str);
+            print('   Decoded UTF8->Latin1: "$latin1Str"');
           }
-        } catch (e) {/* ignore */}
+        } catch (e) {
+          print('   Decoded UTF8->Latin1 hatası: $e');
+        }
       }
 
-      // Windows-1254 benzeri encoding
+      // Windows-1254 benzeri encoding (klasörler için)
       String winEncoded = encodeForWindows1254(fileName);
-      if (winEncoded != fileName) {
+      if (winEncoded != fileName && !variants.contains(winEncoded)) {
         variants.add(winEncoded);
+        print('   Windows-1254: "$winEncoded"');
       }
 
       // Decode edilmiş dosya için Windows encoding
@@ -428,32 +606,96 @@ class TurkishCharacterDecoder {
         if (decodedWinEncoded != decoded &&
             !variants.contains(decodedWinEncoded)) {
           variants.add(decodedWinEncoded);
+          print('   Decoded Windows-1254: "$decodedWinEncoded"');
         }
+      }
+
+      // Özel klasör encoding'i - FTP sunucularında yaygın
+      String folderEncoded = encodeFolderNameForFtp(fileName);
+      if (folderEncoded != fileName && !variants.contains(folderEncoded)) {
+        variants.add(folderEncoded);
+        print('   Folder encoded: "$folderEncoded"');
       }
     }
 
-    // 4. URL encode/decode varyantları
+    // 4. URL encode varyantları (bazı FTP sunucuları için)
     try {
       String urlEncoded = Uri.encodeComponent(fileName);
       if (!variants.contains(urlEncoded)) {
         variants.add(urlEncoded);
+        print('   URL encoded: "$urlEncoded"');
       }
 
       if (decoded != fileName) {
         String decodedUrlEncoded = Uri.encodeComponent(decoded);
         if (!variants.contains(decodedUrlEncoded)) {
           variants.add(decodedUrlEncoded);
+          print('   Decoded URL encoded: "$decodedUrlEncoded"');
         }
       }
-    } catch (e) {/* ignore */}
+    } catch (e) {
+      print('   URL encoding hatası: $e');
+    }
 
-    // Duplikat'ları kaldır
-    return variants.toSet().toList();
+    // 5. Boşluk karakteri düzeltmeleri (klasörler için)
+    if (fileName.contains(' ')) {
+      String spaceReplaced = fileName.replaceAll(' ', '_');
+      if (!variants.contains(spaceReplaced)) {
+        variants.add(spaceReplaced);
+        print('   Boşluk->Alt çizgi: "$spaceReplaced"');
+      }
+
+      String spaceReplaced2 = fileName.replaceAll(' ', '%20');
+      if (!variants.contains(spaceReplaced2)) {
+        variants.add(spaceReplaced2);
+        print('   Boşluk->%20: "$spaceReplaced2"');
+      }
+    }
+
+    // Duplikat'ları kaldır ve sırala (en olası ilk sırada)
+    List<String> uniqueVariants = variants.toSet().toList();
+
+    print('✅ Toplam ${uniqueVariants.length} encoding varyantı oluşturuldu');
+    for (int i = 0; i < uniqueVariants.length; i++) {
+      print('   [$i] "${uniqueVariants[i]}"');
+    }
+
+    return uniqueVariants;
   }
 
-  // 🆕 Windows-1254 benzeri encoding
+  // Klasör adları için özel FTP encoding
+  static String encodeFolderNameForFtp(String folderName) {
+    String result = folderName;
+
+    // Özel klasör encoding patterns
+    final Map<String, String> folderCharMap = {
+      // Ana Türkçe karakterler için FTP-safe encoding
+      'ç': 'c', // Bazı FTP sunucuları için
+      'Ç': 'C',
+      'ğ': 'g',
+      'Ğ': 'G',
+      'ı': 'i',
+      'İ': 'I',
+      'ö': 'o',
+      'Ö': 'O',
+      'ş': 's',
+      'Ş': 'S',
+      'ü': 'u',
+      'Ü': 'U',
+    };
+
+    // Sadece klasör isimlerinde problematik olan karakterler
+    folderCharMap.forEach((turkish, safe) {
+      result = result.replaceAll(turkish, safe);
+    });
+
+    return result;
+  }
+
+  // Windows-1254 benzeri encoding
   static String encodeForWindows1254(String input) {
     Map<String, String> charMap = {
+      // Temel Türkçe karakterler
       'ç': '\u00E7',
       'Ç': '\u00C7',
       'ğ': '\u011F',
@@ -466,6 +708,11 @@ class TurkishCharacterDecoder {
       'Ş': '\u015E',
       'ü': '\u00FC',
       'Ü': '\u00DC',
+
+      // Ek karakterler - klasörler için
+      ' ': '\u0020', // Boşluk
+      '-': '\u002D', // Tire
+      '_': '\u005F', // Alt çizgi
     };
 
     String result = input;
@@ -474,5 +721,151 @@ class TurkishCharacterDecoder {
     });
 
     return result;
+  }
+
+  // Klasör adı doğrulama
+  static bool isFolderNameValid(String folderName) {
+    // Geçersiz karakterleri kontrol et
+    final RegExp invalidChars = RegExp(r'[<>:"/\\|?*]');
+
+    if (invalidChars.hasMatch(folderName)) {
+      return false;
+    }
+
+    // Windows reserved names kontrolü
+    final List<String> reservedNames = [
+      'CON',
+      'PRN',
+      'AUX',
+      'NUL',
+      'COM1',
+      'COM2',
+      'COM3',
+      'COM4',
+      'COM5',
+      'COM6',
+      'COM7',
+      'COM8',
+      'COM9',
+      'LPT1',
+      'LPT2',
+      'LPT3',
+      'LPT4',
+      'LPT5',
+      'LPT6',
+      'LPT7',
+      'LPT8',
+      'LPT9'
+    ];
+
+    String upperName = folderName.toUpperCase();
+    if (reservedNames.contains(upperName)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Test fonksiyonu - klasör adları için
+  static void testFolderDecoding() {
+    List<String> testFolders = [
+      'türkçe_klasör',
+      'Yönetim Belgeler',
+      'İşçi Dosyaları',
+      'Güvenlik & Şifre',
+      'ÇalışanBelgeleri',
+      'Müşteri_Şikayetleri',
+      'Özgeçmişler',
+      'gÃ¼iÅÃ§Ã¶', // Problemli örnek
+    ];
+
+    print('🧪 Klasör encoding test başlıyor:');
+    for (String folderName in testFolders) {
+      print('\n--- Test Klasör: "$folderName" ---');
+
+      // Geçerlilik kontrolü
+      bool isValid = isFolderNameValid(folderName);
+      print('Geçerli: $isValid');
+
+      // Encoding varyantları
+      List<String> variants = generateFtpEncodingVariants(folderName);
+      print('Toplam varyant: ${variants.length}');
+
+      // Decode testi
+      String decoded = decodeFileName(folderName);
+      print('Decode sonucu: "$decoded"');
+    }
+  }
+
+  // Debug: FTP path analizi
+  static void debugFtpPath(String fullPath) {
+    print('🔍 FTP Path Analizi: "$fullPath"');
+
+    // Path parçalarına böl
+    List<String> pathParts =
+        fullPath.split('/').where((s) => s.isNotEmpty).toList();
+
+    print('Path parça sayısı: ${pathParts.length}');
+
+    for (int i = 0; i < pathParts.length; i++) {
+      String part = pathParts[i];
+      print('  [$i] Orijinal: "$part"');
+
+      // Karakter analizi
+      analyzeCharacterCodes(part, label: 'Part $i');
+
+      // Decode edilmiş hali
+      String decoded = decodeFileName(part);
+      if (decoded != part) {
+        print('      Decoded: "$decoded"');
+      }
+
+      // Encoding varyantları
+      List<String> variants = generateFtpEncodingVariants(part);
+      print('      Varyant sayısı: ${variants.length}');
+
+      for (int j = 0; j < variants.length && j < 3; j++) {
+        print('        [$j] "${variants[j]}"');
+      }
+    }
+  }
+
+  // Klasör navigasyonu için path birleştirme
+  static String joinFtpPath(String basePath, String folderName) {
+    // Base path temizleme
+    String cleanBasePath = basePath.trim();
+    if (cleanBasePath.isEmpty) cleanBasePath = '/';
+
+    // Folder name temizleme
+    String cleanFolderName = folderName.trim();
+    if (cleanFolderName.isEmpty) return cleanBasePath;
+
+    // Path birleştirme
+    if (cleanBasePath == '/') {
+      return '/$cleanFolderName';
+    } else if (cleanBasePath.endsWith('/')) {
+      return '$cleanBasePath$cleanFolderName';
+    } else {
+      return '$cleanBasePath/$cleanFolderName';
+    }
+  }
+
+  // Parent directory hesaplama (Türkçe karakter destekli)
+  static String getParentPath(String currentPath) {
+    if (currentPath == '/' || currentPath.isEmpty) {
+      return '/';
+    }
+
+    String cleanPath = currentPath.endsWith('/')
+        ? currentPath.substring(0, currentPath.length - 1)
+        : currentPath;
+
+    int lastSlashIndex = cleanPath.lastIndexOf('/');
+
+    if (lastSlashIndex <= 0) {
+      return '/';
+    }
+
+    return cleanPath.substring(0, lastSlashIndex);
   }
 }
