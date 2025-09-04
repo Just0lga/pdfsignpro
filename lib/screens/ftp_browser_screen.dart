@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/helpers/has_internet.dart';
-import 'package:pdfsignpro/provider/ftp_credential.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
@@ -15,7 +14,8 @@ import '../services/ftp_pdf_loader_service.dart';
 
 // Updated FTP Browser Screen
 class FtpBrowserScreen extends ConsumerStatefulWidget {
-  const FtpBrowserScreen({Key? key}) : super(key: key);
+  final String? fileDirectory;
+  const FtpBrowserScreen({Key? key, this.fileDirectory}) : super(key: key);
 
   @override
   ConsumerState<FtpBrowserScreen> createState() => _FtpBrowserScreenState();
@@ -39,6 +39,10 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   @override
   void initState() {
+    if (widget.fileDirectory != null) {
+      _directoryHistory[0] = widget.fileDirectory!;
+      _currentDirectory = widget.fileDirectory!;
+    }
     print("XXX ftp_browser_screen.dart");
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -49,13 +53,14 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   // Credentials kontrolü ve gerekirse dialog göster
   Future<void> _checkCredentialsAndConnect() async {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+    final tempCredentials = ref.watch(temporaryFtpCredentialsProvider);
 
     if (selectedFtpConnection == null) {
       _showError('FTP sunucu seçilmedi');
       return;
     }
 
-    // Host ve port kontrolü
+    // Host ve port kontrolü - bunlar backend'den geldiği için boş olamaz
     if (selectedFtpConnection.host == null ||
         selectedFtpConnection.host!.isEmpty ||
         selectedFtpConnection.port == null) {
@@ -63,38 +68,18 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       return;
     }
 
-    // ✅ YENİ: Önce kayıtlı credentials var mı kontrol et
-    final savedCredentials =
-        await FtpCredentialsStorage.getCredentials(selectedFtpConnection.name);
+    // Kullanıcı adı ve şifreyi belirle (öncelik geçici credentials'ta)
+    final username =
+        tempCredentials?['username'] ?? selectedFtpConnection.uname ?? '';
+    final password =
+        tempCredentials?['password'] ?? selectedFtpConnection.pass ?? '';
 
-    if (savedCredentials != null) {
-      print('📦 Kayıtlı credentials bulundu: ${selectedFtpConnection.name}');
-
-      // Kayıtlı bilgileri provider'a yükle
-      ref.read(temporaryFtpCredentialsProvider.notifier).state =
-          savedCredentials;
-
-      setState(() {
-        _tempUsername = savedCredentials['username'];
-        _tempPassword = savedCredentials['password'];
-      });
-
-      // Doğrudan bağlan
-      _checkConnectionAndList();
-      return;
-    }
-
-    // Backend'den gelen bilgileri kontrol et
-    final hasUsername = selectedFtpConnection.uname != null &&
-        selectedFtpConnection.uname!.trim().isNotEmpty;
-    final hasPassword = selectedFtpConnection.pass != null &&
-        selectedFtpConnection.pass!.trim().isNotEmpty;
+    final hasUsername = username.trim().isNotEmpty;
+    final hasPassword = password.trim().isNotEmpty;
 
     if (!hasUsername || !hasPassword) {
-      // Kayıtlı bilgi yok ve backend'de de eksik - dialog göster
       await _showCredentialsDialog();
     } else {
-      // Backend'deki bilgilerle bağlan
       _checkConnectionAndList();
     }
   }
@@ -104,21 +89,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
     if (selectedFtpConnection == null) return;
 
-    // ✅ YENİ: Kayıtlı credentials varsa onları başlangıç değeri yap
-    final savedCredentials =
-        await FtpCredentialsStorage.getCredentials(selectedFtpConnection.name);
-
-    final String? initialUsername =
-        savedCredentials?['username'] ?? selectedFtpConnection.uname;
-    final String? initialPassword =
-        savedCredentials?['password'] ?? selectedFtpConnection.pass;
-
     final result = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
       builder: (context) => UserPassRequestDialog(
-        initialUsername: initialUsername,
-        initialPassword: initialPassword,
+        initialUsername: selectedFtpConnection.uname,
+        initialPassword: selectedFtpConnection.pass,
         serverName: selectedFtpConnection.name,
         host: selectedFtpConnection.host!,
         port: selectedFtpConnection.port!,
@@ -126,14 +102,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
 
     if (result != null) {
-      // ✅ YENİ: Credentials'ı kalıcı olarak kaydet
-      await FtpCredentialsStorage.saveCredentials(
-        serverName: selectedFtpConnection.name,
-        username: result['username']!,
-        password: result['password']!,
-      );
-
-      // Provider'a kaydet
+      // ✅ YENİ: Geçici credentials'ı provider'a kaydet
       ref.read(temporaryFtpCredentialsProvider.notifier).state = {
         'username': result['username']!,
         'password': result['password']!,
@@ -143,7 +112,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         _tempUsername = result['username'];
         _tempPassword = result['password'];
       });
-
       _checkConnectionAndList();
     } else {
       // Kullanıcı iptal etti, geri git
@@ -155,35 +123,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         );
       }
     }
-  }
-
-// ✅ YENİ: Credentials silme metodu (opsiyonel - manuel silme için)
-  Future<void> _clearSavedCredentials() async {
-    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
-
-    if (selectedFtpConnection == null) return;
-
-    await FtpCredentialsStorage.removeCredentials(selectedFtpConnection.name);
-
-    // Provider'ı temizle
-    ref.read(temporaryFtpCredentialsProvider.notifier).state = null;
-
-    setState(() {
-      _tempUsername = null;
-      _tempPassword = null;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text('Kayıtlı bağlantı bilgileri silindi'),
-        backgroundColor: Colors.orange,
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    // Yeni bilgi iste
-    await _showCredentialsDialog();
   }
 
   void _showError(String message) {
@@ -531,6 +470,33 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
+        if (_isLoading) {
+          // Eğer sayfa yükleniyorsa geri gidilemez
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Row(
+                children: [
+                  Icon(
+                    Icons.close,
+                    color: Colors.white,
+                  ),
+                  SizedBox(
+                    width: 8,
+                  ),
+                  Text(
+                    'Lütfen işlemin tamamlanmasını bekleyin...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 1),
+            ),
+          );
+          return false;
+        }
+
         if (_currentDirectory != '/') {
           _goBack();
           return false;
@@ -548,7 +514,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           iconTheme: IconThemeData(color: Colors.white),
           backgroundColor: Color(0xFF112b66),
           centerTitle: true,
-          // AppBar actions'a opsiyonel olarak credential temizleme butonu ekleyebilirsiniz:
           actions: [
             IconButton(
               icon: Icon(Icons.refresh, color: Colors.white),
@@ -561,73 +526,24 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               onPressed: _isLoading ? null : _showCredentialsDialog,
               tooltip: 'Bağlantı Bilgileri',
             ),
-            // ✅ YENİ: Kayıtlı bilgileri temizleme (opsiyonel)
-            PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert, color: Colors.white),
-              onSelected: (value) async {
-                if (value == 'clear_credentials') {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: Text('Kayıtlı Bilgileri Sil'),
-                      content: Text(
-                          'Bu sunucu için kayıtlı kullanıcı bilgileri silinecek. Emin misiniz?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: Text('İptal'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child:
-                              Text('Sil', style: TextStyle(color: Colors.red)),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true) {
-                    await _clearSavedCredentials();
-                  }
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'clear_credentials',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                      SizedBox(width: 8),
-                      Text('Kayıtlı Bilgileri Sil'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            Container(
-              margin: EdgeInsets.only(right: 8),
-              child: Icon(
-                _hasInternetConnection ? Icons.wifi : Icons.wifi_off,
-                color: _hasInternetConnection ? Colors.green : Colors.red,
-                size: 24,
-              ),
-            ),
           ],
-          leading: _currentDirectory == '/'
-              ? IconButton(
-                  onPressed: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => PdfSourceSelectionScreen()),
-                      (Route<dynamic> route) => false,
-                    );
-                  },
-                  icon: Icon(Icons.arrow_back_ios_new))
-              : IconButton(
-                  onPressed: _goBack,
-                  icon: Icon(Icons.arrow_back_ios_new),
-                ),
+          leading: _isLoading
+              ? SizedBox()
+              : _currentDirectory == '/'
+                  ? IconButton(
+                      onPressed: () {
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => PdfSourceSelectionScreen()),
+                          (Route<dynamic> route) => false,
+                        );
+                      },
+                      icon: Icon(Icons.arrow_back_ios_new))
+                  : IconButton(
+                      onPressed: _goBack,
+                      icon: Icon(Icons.arrow_back_ios_new),
+                    ),
         ),
         body: Column(
           children: [
@@ -825,18 +741,21 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                   child: Column(
                     children: [
                       ListTile(
-                        leading: Icon(
-                          file.isDirectory
-                              ? Icons.folder
-                              : Icons.picture_as_pdf,
-                          color: file.isDirectory
-                              ? Colors.amber
-                              : Color(0xFF112b66),
-                          size: 36,
+                        leading: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Icon(
+                            file.isDirectory
+                                ? Icons.folder
+                                : Icons.picture_as_pdf,
+                            color: file.isDirectory
+                                ? Colors.amber
+                                : Color(0xFF112b66),
+                            size: 36,
+                          ),
                         ),
                         title: Text(
                           file.name,
-                          style: const TextStyle(fontWeight: FontWeight.w500),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

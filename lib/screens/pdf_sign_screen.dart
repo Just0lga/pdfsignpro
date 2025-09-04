@@ -43,7 +43,7 @@ class PdfSignScreen extends ConsumerWidget {
                   context,
                   MaterialPageRoute(
                       builder: (context) => isItFtp
-                          ? FtpBrowserScreen()
+                          ? FtpBrowserScreen(fileDirectory: fileDirectory)
                           : PdfSourceSelectionScreen()),
                   (Route<dynamic> route) => false, // tüm eski route’ları sil
                 );
@@ -95,7 +95,7 @@ class PdfSignScreen extends ConsumerWidget {
                 context,
                 MaterialPageRoute(
                     builder: (context) => isItFtp
-                        ? FtpBrowserScreen()
+                        ? FtpBrowserScreen(fileDirectory: fileDirectory)
                         : PdfSourceSelectionScreen()),
                 (Route<dynamic> route) => false, // tüm eski route’ları sil
               );
@@ -242,7 +242,7 @@ class PdfSignScreen extends ConsumerWidget {
     );
   }
 
-  // pdf_sign_screen.dart'tan güncellenmesi gereken _savePDF metodu:
+// pdf_sign_screen.dart'tan güncellenmesi gereken _savePDF metodu:
 
   Future<void> _savePDF(
       BuildContext context, PdfNotifier notifier, WidgetRef ref) async {

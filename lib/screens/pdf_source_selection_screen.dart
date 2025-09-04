@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/provider/asset_provider.dart';
 import 'package:pdfsignpro/provider/auth_provider.dart';
-import 'package:pdfsignpro/provider/ftp_credential.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/local_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
@@ -758,8 +757,6 @@ class _PdfSourceSelectionScreenState
     });
   }
 
-  // pdf_source_selection_screen.dart'tan güncellenmesi gereken logout metodu:
-
   void _logout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -782,20 +779,15 @@ class _PdfSourceSelectionScreenState
               ),
             ),
             TextButton(
-              onPressed: () async {
-                // ✅ async eklendi
-                // ✅ YENİ: Tüm kayıtlı FTP credentials'ları temizle
-                await FtpCredentialsStorage.clearAllCredentials();
-
+              onPressed: () {
                 ref.read(authProvider.notifier).logout(clearRememberMe: true);
                 ref.read(pdfProvider.notifier).reset();
                 ref.read(selectedFtpConnectionProvider.notifier).state = null;
-                ref.read(temporaryFtpCredentialsProvider.notifier).state = null;
 
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => LoginScreen()),
-                  (Route<dynamic> route) => false,
+                  (Route<dynamic> route) => false, // tüm eski route’ları sil
                 );
 
                 ScaffoldMessenger.of(context).showSnackBar(
