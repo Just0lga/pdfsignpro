@@ -7,18 +7,20 @@ import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/screens/ftp_browser_screen.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/ftp_pdf_loader_service.dart';
 import '../widgets/pdf_page_widget.dart';
 import '../widgets/signature_dialog.dart';
 
 class PdfSignScreen extends ConsumerWidget {
   final bool isItFtp;
-  const PdfSignScreen({this.isItFtp = true});
+  final String fileDirectory;
+  const PdfSignScreen({this.isItFtp = true, required this.fileDirectory});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pdfState = ref.watch(pdfProvider);
     final pdfNotifier = ref.read(pdfProvider.notifier);
-
+    print("ooo bu alınan $fileDirectory");
     return WillPopScope(
       onWillPop: () async {
         // PDF temizle ve geri git
@@ -240,19 +242,16 @@ class PdfSignScreen extends ConsumerWidget {
     );
   }
 
+  // pdf_sign_screen.dart'tan güncellenmesi gereken _savePDF metodu:
+
   Future<void> _savePDF(
       BuildContext context, PdfNotifier notifier, WidgetRef ref) async {
     final connectionDetails = ref.read(ftpConnectionDetailsProvider);
 
-    if (connectionDetails == null || !connectionDetails.isValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('FTP bağlantı bilgileri eksik!'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    // ✅ KALDIRILIYOR - Artık SharedPreferences'a gerek yok
+    // final prefs = await SharedPreferences.getInstance();
+    // String? username = prefs.getString("${connectionDetails}username");
+    // String? password = prefs.getString("${connectionDetails}pass");
 
     // Loading göster
     showDialog(
@@ -278,11 +277,32 @@ class PdfSignScreen extends ConsumerWidget {
       final Uint8List signedPdfBytes = result['bytes'];
       final String fileName = '${result['fileName']}.pdf';
 
+      // ✅ YENİ: connectionDetails artık güncel credentials içeriyor
+      if (connectionDetails == null ||
+          connectionDetails.username.isEmpty ||
+          connectionDetails.password.isEmpty) {
+        if (context.mounted) Navigator.pop(context);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Text(
+                  'Kullanıcı bilgileri eksik. FTP sayfasına dönüp bilgileri girin.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       // Dosya var mı kontrol et
       final existingFiles = await FtpPdfLoaderService.listPdfFiles(
         host: connectionDetails.host,
-        username: connectionDetails.username,
-        password: connectionDetails.password,
+        username:
+            connectionDetails.username, // ✅ Doğrudan connectionDetails'dan
+        password:
+            connectionDetails.password, // ✅ Doğrudan connectionDetails'dan
         port: connectionDetails.port,
       );
 
@@ -363,10 +383,11 @@ class PdfSignScreen extends ConsumerWidget {
 
       final success = await FtpPdfLoaderService.uploadPdfToFtp(
         host: connectionDetails.host,
-        username: connectionDetails.username,
-        password: connectionDetails.password,
+        username: connectionDetails.username, // ✅ Güncel credentials
+        password: connectionDetails.password, // ✅ Güncel credentials
         pdfBytes: signedPdfBytes,
         fileName: fileName,
+        directory: fileDirectory,
         port: connectionDetails.port,
         overwrite: shouldOverwrite,
       );
@@ -387,6 +408,12 @@ class PdfSignScreen extends ConsumerWidget {
                       Text(
                         'Bağlantı: ${connectionDetails.name}',
                         style: TextStyle(fontSize: 12),
+                      ),
+                      // ✅ YENİ: Hangi kullanıcı ile kaydedildiğini göster
+                      Text(
+                        'Kullanıcı: ${connectionDetails.username}',
+                        style: TextStyle(
+                            fontSize: 11, fontStyle: FontStyle.italic),
                       ),
                     ],
                   )

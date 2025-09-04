@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/helpers/has_internet.dart';
+import 'package:pdfsignpro/provider/ftp_credential.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import 'package:intl/intl.dart';
-import 'dart:typed_data';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:pdfsignpro/widgets/user_pass_request_dialog.dart';
 import '../models/frontend_models/ftp_file.dart';
 import '../services/ftp_pdf_loader_service.dart';
 
+// Updated FTP Browser Screen
 class FtpBrowserScreen extends ConsumerStatefulWidget {
   const FtpBrowserScreen({Key? key}) : super(key: key);
 
@@ -26,7 +27,14 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   String? _lastError;
   bool _hasInternetConnection = true;
 
-  // ✅ Future'ı state variable olarak saklayalım
+  // Folder navigation için
+  String _currentDirectory = '/';
+  List<String> _directoryHistory = ['/'];
+
+  // Geçici credentials
+  String? _tempUsername;
+  String? _tempPassword;
+
   Future<List<FtpFile>>? _ftpFilesFuture;
 
   @override
@@ -34,7 +42,154 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     print("XXX ftp_browser_screen.dart");
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkCredentialsAndConnect();
+    });
+  }
+
+  // Credentials kontrolü ve gerekirse dialog göster
+  Future<void> _checkCredentialsAndConnect() async {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
+    if (selectedFtpConnection == null) {
+      _showError('FTP sunucu seçilmedi');
+      return;
+    }
+
+    // Host ve port kontrolü
+    if (selectedFtpConnection.host == null ||
+        selectedFtpConnection.host!.isEmpty ||
+        selectedFtpConnection.port == null) {
+      _showError('Sunucu bilgileri eksik (host/port)');
+      return;
+    }
+
+    // ✅ YENİ: Önce kayıtlı credentials var mı kontrol et
+    final savedCredentials =
+        await FtpCredentialsStorage.getCredentials(selectedFtpConnection.name);
+
+    if (savedCredentials != null) {
+      print('📦 Kayıtlı credentials bulundu: ${selectedFtpConnection.name}');
+
+      // Kayıtlı bilgileri provider'a yükle
+      ref.read(temporaryFtpCredentialsProvider.notifier).state =
+          savedCredentials;
+
+      setState(() {
+        _tempUsername = savedCredentials['username'];
+        _tempPassword = savedCredentials['password'];
+      });
+
+      // Doğrudan bağlan
       _checkConnectionAndList();
+      return;
+    }
+
+    // Backend'den gelen bilgileri kontrol et
+    final hasUsername = selectedFtpConnection.uname != null &&
+        selectedFtpConnection.uname!.trim().isNotEmpty;
+    final hasPassword = selectedFtpConnection.pass != null &&
+        selectedFtpConnection.pass!.trim().isNotEmpty;
+
+    if (!hasUsername || !hasPassword) {
+      // Kayıtlı bilgi yok ve backend'de de eksik - dialog göster
+      await _showCredentialsDialog();
+    } else {
+      // Backend'deki bilgilerle bağlan
+      _checkConnectionAndList();
+    }
+  }
+
+  Future<void> _showCredentialsDialog() async {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
+    if (selectedFtpConnection == null) return;
+
+    // ✅ YENİ: Kayıtlı credentials varsa onları başlangıç değeri yap
+    final savedCredentials =
+        await FtpCredentialsStorage.getCredentials(selectedFtpConnection.name);
+
+    final String? initialUsername =
+        savedCredentials?['username'] ?? selectedFtpConnection.uname;
+    final String? initialPassword =
+        savedCredentials?['password'] ?? selectedFtpConnection.pass;
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => UserPassRequestDialog(
+        initialUsername: initialUsername,
+        initialPassword: initialPassword,
+        serverName: selectedFtpConnection.name,
+        host: selectedFtpConnection.host!,
+        port: selectedFtpConnection.port!,
+      ),
+    );
+
+    if (result != null) {
+      // ✅ YENİ: Credentials'ı kalıcı olarak kaydet
+      await FtpCredentialsStorage.saveCredentials(
+        serverName: selectedFtpConnection.name,
+        username: result['username']!,
+        password: result['password']!,
+      );
+
+      // Provider'a kaydet
+      ref.read(temporaryFtpCredentialsProvider.notifier).state = {
+        'username': result['username']!,
+        'password': result['password']!,
+      };
+
+      setState(() {
+        _tempUsername = result['username'];
+        _tempPassword = result['password'];
+      });
+
+      _checkConnectionAndList();
+    } else {
+      // Kullanıcı iptal etti, geri git
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => PdfSourceSelectionScreen()),
+          (Route<dynamic> route) => false,
+        );
+      }
+    }
+  }
+
+// ✅ YENİ: Credentials silme metodu (opsiyonel - manuel silme için)
+  Future<void> _clearSavedCredentials() async {
+    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+
+    if (selectedFtpConnection == null) return;
+
+    await FtpCredentialsStorage.removeCredentials(selectedFtpConnection.name);
+
+    // Provider'ı temizle
+    ref.read(temporaryFtpCredentialsProvider.notifier).state = null;
+
+    setState(() {
+      _tempUsername = null;
+      _tempPassword = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text('Kayıtlı bağlantı bilgileri silindi'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // Yeni bilgi iste
+    await _showCredentialsDialog();
+  }
+
+  void _showError(String message) {
+    setState(() {
+      _lastError = message;
+      _hasInternetConnection = false;
     });
   }
 
@@ -51,7 +206,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         return false;
       }
 
-      // Gerçek ağ erişimini test et
       final result = await InternetAddress.lookup('google.com').timeout(
         Duration(seconds: 5),
         onTimeout: () => throw SocketException('Timeout'),
@@ -100,20 +254,19 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     }
   }
 
-  // ✅ Yeniden düzenlenmiş ana bağlantı kontrolü
+  // Ana bağlantı kontrolü
   Future<void> _checkConnectionAndList() async {
     if (_isLoading) return;
 
     setState(() {
       _isLoading = true;
       _lastError = null;
-      _ftpFilesFuture = null; // Eski future'ı temizle
+      _ftpFilesFuture = null;
     });
 
     try {
       print('🔍 Bağlantı kontrolü başlıyor...');
 
-      // 1. İnternet bağlantısını kontrol et
       bool hasInternet = await _checkInternetConnection();
       if (!hasInternet) {
         setState(() {
@@ -123,7 +276,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         return;
       }
 
-      // 2. FTP sunucu bağlantısını kontrol et
       bool ftpReachable = await _checkFtpServerConnection();
       if (!ftpReachable) {
         setState(() {
@@ -133,7 +285,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         return;
       }
 
-      // 3. FTP dosya listesini yükle
       await _loadFtpFiles();
     } catch (e) {
       print('❌ Genel bağlantı hatası: $e');
@@ -146,33 +297,38 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     }
   }
 
-  // ✅ FTP dosyalarını yükle
+  // FTP dosyalarını yükle - credentials ile
   Future<void> _loadFtpFiles() async {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+    final credentials = ref.watch(activeFtpCredentialsProvider); // ✅ YENİ
+
+    // ✅ Artık activeFtpCredentialsProvider'dan al
+    final username = credentials?['username'] ?? '';
+    final password = credentials?['password'] ?? '';
+
+    if (username.isEmpty || password.isEmpty) {
+      setState(() {
+        _lastError = 'Kullanıcı adı veya şifre eksik';
+        _isLoading = false;
+      });
+      return;
+    }
 
     try {
       print('🔄 FTP dosya listesi yükleniyor...');
+      print('📁 Mevcut dizin: $_currentDirectory');
+      print('👤 Kullanıcı: $username');
 
-      // Future'ı oluştur ve state'e kaydet
-      _ftpFilesFuture = _showAllFiles
-          ? FtpPdfLoaderService.listAllFiles(
-              host: selectedFtpConnection?.host ?? "",
-              username: selectedFtpConnection?.uname ?? "",
-              password: selectedFtpConnection?.pass ?? "",
-              directory: "/",
-              port: selectedFtpConnection?.port ?? 21,
-            )
-          : FtpPdfLoaderService.listPdfFiles(
-              host: selectedFtpConnection?.host ?? "",
-              username: selectedFtpConnection?.uname ?? "",
-              password: selectedFtpConnection?.pass ?? "",
-              directory: "/",
-              port: selectedFtpConnection?.port ?? 21,
-            );
+      _ftpFilesFuture = FtpPdfLoaderService.listAllFiles(
+        host: selectedFtpConnection?.host ?? "",
+        username: username, // ✅ Güncel credentials
+        password: password, // ✅ Güncel credentials
+        directory: _currentDirectory,
+        port: selectedFtpConnection?.port ?? 21,
+      );
 
-      // Future'ı test edelim
       final files = await _ftpFilesFuture!;
-      print('✅ FTP dosya listesi yüklendi: ${files.length} dosya');
+      print('✅ FTP dosya listesi yüklendi: ${files.length} dosya/klasör');
 
       setState(() {
         _isLoading = false;
@@ -182,62 +338,119 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       print('❌ FTP dosya yükleme hatası: $e');
       print('Stack trace: $stackTrace');
 
+      if (e.toString().toLowerCase().contains('authentication') ||
+          e.toString().toLowerCase().contains('login') ||
+          e.toString().toLowerCase().contains('credential')) {
+        await _showCredentialsDialog();
+      } else {
+        setState(() {
+          _lastError = 'FTP dosya listesi alınamadı: ${e.toString()}';
+          _ftpFilesFuture = null;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // Folder navigation metodları
+  void _navigateToDirectory(FtpFile directory) {
+    if (!directory.isDirectory) return;
+
+    setState(() {
+      _currentDirectory = directory.path;
+      if (!_directoryHistory.contains(directory.path)) {
+        _directoryHistory.add(directory.path);
+      }
+    });
+    _checkConnectionAndList();
+  }
+
+  void _goBack() {
+    if (_currentDirectory != '/' && _directoryHistory.length > 1) {
+      _directoryHistory.removeLast();
       setState(() {
-        _lastError = 'FTP dosya listesi alınamadı: ${e.toString()}';
-        _ftpFilesFuture = null;
-        _isLoading = false;
+        _currentDirectory = _directoryHistory.last;
       });
+      _checkConnectionAndList();
+    } else if (_currentDirectory != '/') {
+      // Fallback: parent directory'ye git
+      String parentDir =
+          _currentDirectory.substring(0, _currentDirectory.lastIndexOf('/'));
+      if (parentDir.isEmpty) parentDir = '/';
+      setState(() {
+        _currentDirectory = parentDir;
+        _directoryHistory = ['/'];
+        if (parentDir != '/') _directoryHistory.add(parentDir);
+      });
+      _checkConnectionAndList();
     }
   }
 
-  // ✅ Test metodu
-  Future<void> _testFtpConnection() async {
-    print('🧪 FTP TEST BAŞLIYOR...');
-    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+  // Breadcrumb navigation widget
+  Widget _buildBreadcrumbNavigation() {
+    print("OOO $_currentDirectory");
+    List<String> pathParts =
+        _currentDirectory.split('/').where((s) => s.isNotEmpty).toList();
 
-    try {
-      final files = await FtpPdfLoaderService.listPdfFiles(
-        host: selectedFtpConnection?.host ?? "",
-        username: selectedFtpConnection?.uname ?? "",
-        password: selectedFtpConnection?.pass ?? "",
-        directory: "/",
-        port: selectedFtpConnection?.port ?? 21,
-      );
-
-      print('✅ TEST BAŞARILI: ${files.length} dosya bulundu');
-      for (var file in files) {
-        print('   - ${file.name} (${file.sizeFormatted})');
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Test başarılı: ${files.length} dosya bulundu'),
-            backgroundColor: Colors.green,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _currentDirectory = '/';
+                _directoryHistory = ['/'];
+              });
+              _checkConnectionAndList();
+            },
+            child: Text("FTP PDF Listesi",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
-        );
-      }
-    } catch (e, stackTrace) {
-      print('❌ TEST BAŞARISIZ:');
-      print('   Hata: $e');
-      print('   Stack: $stackTrace');
+          ...pathParts.asMap().entries.map((entry) {
+            int index = entry.key;
+            String part = entry.value;
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Test başarısız: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+            return Row(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    String targetPath =
+                        '/' + pathParts.sublist(0, index + 1).join('/');
+                    setState(() {
+                      _currentDirectory = targetPath;
+                      _directoryHistory = _directoryHistory
+                          .where((path) =>
+                              targetPath.startsWith(path) || path == '/')
+                          .toList();
+                    });
+                    _checkConnectionAndList();
+                  },
+                  child: Text("",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
   }
 
-  // Dosyaları tarihe göre sırala (en yeni önce)
+  // Dosyaları tarihe göre sırala (klasörler önce)
   List<FtpFile> _sortFilesByDate(List<FtpFile> files) {
     final sortedFiles = List<FtpFile>.from(files);
 
     sortedFiles.sort((a, b) {
+      // Klasörler önce
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+
+      // Aynı tipte ise tarihe göre sırala
       if (a.modifyTime != null && b.modifyTime != null) {
         return b.modifyTime!.compareTo(a.modifyTime!);
       } else if (a.modifyTime != null && b.modifyTime == null) {
@@ -318,35 +531,79 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
+        if (_currentDirectory != '/') {
+          _goBack();
+          return false;
+        }
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => PdfSourceSelectionScreen()),
-          (Route<dynamic> route) => false, // tüm eski route’ları sil
+          (Route<dynamic> route) => false,
         );
         return true;
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('FTP PDF Listesi',
-              style:
-                  TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          title: _buildBreadcrumbNavigation(),
           iconTheme: IconThemeData(color: Colors.white),
           backgroundColor: Color(0xFF112b66),
           centerTitle: true,
+          // AppBar actions'a opsiyonel olarak credential temizleme butonu ekleyebilirsiniz:
           actions: [
-            // Test butonu
-            /*
-            IconButton(
-              icon: Icon(Icons.bug_report, color: Colors.white),
-              onPressed: _testFtpConnection,
-              tooltip: 'FTP Test',
-            ),*/
             IconButton(
               icon: Icon(Icons.refresh, color: Colors.white),
               onPressed: _isLoading ? null : _checkConnectionAndList,
               tooltip: 'Yenile',
             ),
-            // Bağlantı durumu göstergesi
+            // Credentials edit butonu
+            IconButton(
+              icon: Icon(Icons.account_circle, color: Colors.white),
+              onPressed: _isLoading ? null : _showCredentialsDialog,
+              tooltip: 'Bağlantı Bilgileri',
+            ),
+            // ✅ YENİ: Kayıtlı bilgileri temizleme (opsiyonel)
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert, color: Colors.white),
+              onSelected: (value) async {
+                if (value == 'clear_credentials') {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: Text('Kayıtlı Bilgileri Sil'),
+                      content: Text(
+                          'Bu sunucu için kayıtlı kullanıcı bilgileri silinecek. Emin misiniz?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text('İptal'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child:
+                              Text('Sil', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    await _clearSavedCredentials();
+                  }
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'clear_credentials',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      SizedBox(width: 8),
+                      Text('Kayıtlı Bilgileri Sil'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             Container(
               margin: EdgeInsets.only(right: 8),
               child: Icon(
@@ -356,16 +613,21 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               ),
             ),
           ],
-          leading: IconButton(
-              onPressed: () {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => PdfSourceSelectionScreen()),
-                  (Route<dynamic> route) => false, // tüm eski route’ları sil
-                );
-              },
-              icon: Icon(Icons.arrow_back_ios_new)),
+          leading: _currentDirectory == '/'
+              ? IconButton(
+                  onPressed: () {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => PdfSourceSelectionScreen()),
+                      (Route<dynamic> route) => false,
+                    );
+                  },
+                  icon: Icon(Icons.arrow_back_ios_new))
+              : IconButton(
+                  onPressed: _goBack,
+                  icon: Icon(Icons.arrow_back_ios_new),
+                ),
         ),
         body: Column(
           children: [
@@ -381,12 +643,16 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   Widget _buildConnectionInfo() {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+    final credentials = ref.watch(activeFtpCredentialsProvider); // ✅ YENİ
+
+    // ✅ Güncel username'i göster
+    final displayUsername = credentials?['username'] ?? 'Belirtilmemiş';
 
     return Container(
       color: Color(0xFF112b66).withOpacity(0.1),
       padding: const EdgeInsets.all(12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, // sola hizala
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -394,9 +660,9 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Kullanıcı: ${selectedFtpConnection?.uname}',
+                  'Kullanıcı: $displayUsername',
                   style: const TextStyle(fontSize: 13),
-                  overflow: TextOverflow.ellipsis, // taşarsa ... koyar
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -428,15 +694,15 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(Icons.sort, size: 20, color: Color(0xFF112b66)),
+              const Icon(Icons.folder, size: 20, color: Color(0xFF112b66)),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Dosyalar tarihe göre sıralandı (En yeni önce)',
+                  'Dizin: $_currentDirectory',
                   style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFF112b66),
-                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -448,15 +714,13 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
   }
 
-  // ✅ Yeniden düzenlenmiş dosya listesi
   Widget _buildFileList() {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
-    // Bağlantı yoksa hata göster
+
     if (!_hasInternetConnection) {
       return _buildConnectionError();
     }
 
-    // Loading durumu
     if (_isLoading) {
       return Center(
         child: Column(
@@ -470,7 +734,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       );
     }
 
-    // Future henüz oluşturulmamış
     if (_ftpFilesFuture == null) {
       return Center(
         child: Column(
@@ -490,7 +753,6 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       );
     }
 
-    // FutureBuilder ile dosya listesi
     return FutureBuilder<List<FtpFile>>(
       future: _ftpFilesFuture,
       builder: (context, snapshot) {
@@ -501,7 +763,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               children: [
                 CircularProgressIndicator(color: Color(0xFF112b66)),
                 SizedBox(height: 16),
-                Text('FTP sunucudan dosyalar alınıyor...'),
+                Text('FTP sunucudan içerik alınıyor...'),
                 SizedBox(height: 8),
                 Text(
                   'Sunucu: ${selectedFtpConnection?.host}:${selectedFtpConnection?.port}',
@@ -527,19 +789,12 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               children: [
                 const Icon(Icons.folder_open, size: 48, color: Colors.grey),
                 const SizedBox(height: 16),
-                Text(_showAllFiles
-                    ? 'Hiç dosya bulunamadı'
-                    : 'PDF dosyası bulunamadı'),
+                Text('Bu klasör boş'),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _checkConnectionAndList,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Yenile'),
-                    ),
-                  ],
+                ElevatedButton.icon(
+                  onPressed: _checkConnectionAndList,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Yenile'),
                 ),
               ],
             ),
@@ -553,10 +808,13 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
             itemCount: files.length,
             itemBuilder: (context, index) {
               final file = files[index];
-              final isPdf = file.name.toLowerCase().endsWith('.pdf');
 
               return GestureDetector(
-                onTap: isPdf ? () => _downloadAndOpenPdf(file) : null,
+                onTap: file.isDirectory
+                    ? () => _navigateToDirectory(file)
+                    : (file.name.toLowerCase().endsWith('.pdf')
+                        ? () => _downloadAndOpenPdf(file)
+                        : null),
                 child: Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -567,47 +825,43 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
                   child: Column(
                     children: [
                       ListTile(
-                        subtitle: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        leading: Icon(
+                          file.isDirectory
+                              ? Icons.folder
+                              : Icons.picture_as_pdf,
+                          color: file.isDirectory
+                              ? Colors.amber
+                              : Color(0xFF112b66),
+                          size: 36,
+                        ),
+                        title: Text(
+                          file.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              flex: 10,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    file.name,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                  Text(
-                                    'Boyut: ${file.sizeFormatted}',
-                                    style: TextStyle(color: Color(0xFF112b66)),
-                                  ),
-                                  if (file.modifyTime != null)
-                                    Text(
-                                      'Tarih: ${DateFormat('d MMMM y HH:mm', 'tr_TR').format(file.modifyTime!.add(Duration(hours: 3)))}',
-                                      style: TextStyle(
-                                        color: Color(0xFF112b66),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                ],
-                              ),
+                            Text(
+                              file.isDirectory
+                                  ? 'Klasör'
+                                  : 'Boyut: ${file.sizeFormatted}',
+                              style: TextStyle(color: Color(0xFF112b66)),
                             ),
-                            Expanded(
-                              flex: 2,
-                              child: Icon(
-                                Icons.picture_as_pdf,
-                                color: Color(0xFF112b66),
-                                size: 36,
+                            if (file.modifyTime != null)
+                              Text(
+                                'Tarih: ${DateFormat('d MMMM y HH:mm', 'tr_TR').format(file.modifyTime!.add(Duration(hours: 3)))}',
+                                style: TextStyle(
+                                  color: Color(0xFF112b66),
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                         isThreeLine: file.modifyTime != null,
                       ),
-                      if (isPdf) _buildSignatureBoxes(file),
+                      if (!file.isDirectory &&
+                          file.name.toLowerCase().endsWith('.pdf'))
+                        _buildSignatureBoxes(file),
                       const SizedBox(height: 8),
                     ],
                   ),
@@ -643,10 +897,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _checkConnectionAndList,
-            icon: Icon(
-              Icons.refresh,
-              color: Colors.white,
-            ),
+            icon: Icon(Icons.refresh, color: Colors.white),
             label: Text('Tekrar Dene'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Color(0xFF112b66),
@@ -678,37 +929,24 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               style: TextStyle(color: Colors.grey[600], fontSize: 14),
             ),
           ),
-          const SizedBox(height: 8),
-          // Hata detayı (debug için)
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              error.length > 100 ? error.substring(0, 100) + '...' : error,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.red, fontSize: 12),
-            ),
-          ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ElevatedButton.icon(
                 onPressed: _checkConnectionAndList,
-                icon: const Icon(
-                  Icons.refresh,
-                  color: Colors.white,
-                ),
+                icon: const Icon(Icons.refresh, color: Colors.white),
                 label: const Text('Tekrar Dene'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color(0xFF112b66),
                   foregroundColor: Colors.white,
                 ),
               ),
-              SizedBox(width: 16),
+              SizedBox(width: 12),
               ElevatedButton.icon(
-                onPressed: _testFtpConnection,
-                icon: const Icon(Icons.bug_report),
-                label: const Text('Test'),
+                onPressed: _showCredentialsDialog,
+                icon: const Icon(Icons.account_circle, color: Colors.white),
+                label: const Text('Bağlantı Bilgileri'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   foregroundColor: Colors.white,
@@ -721,100 +959,19 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
   }
 
-  // ignore: unused_element, it is for testing
-  Future<void> _uploadTestPdf() async {
-    final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
-
-    try {
-      final testPdfBytes = await _createTestPdf();
-      final fileName = 'test_${DateTime.now().millisecondsSinceEpoch}.pdf';
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => WillPopScope(
-          onWillPop: () async => false, // Geri tuşunu engelle
-          child: AlertDialog(
-            content: Row(
-              children: [
-                CircularProgressIndicator(color: Color(0xFF112b66)),
-                SizedBox(width: 16),
-                Text('Test PDF yükleniyor...'),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      final success = await FtpPdfLoaderService.uploadPdfToFtp(
-          host: selectedFtpConnection?.host ?? "",
-          username: selectedFtpConnection?.uname ?? "",
-          password: selectedFtpConnection?.pass ?? "",
-          pdfBytes: testPdfBytes,
-          fileName: fileName,
-          port: selectedFtpConnection?.port ?? 21);
-
-      if (context.mounted) {
-        Navigator.pop(context);
-
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Test PDF yüklendi: $fileName'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          _checkConnectionAndList();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('PDF yüklenemedi'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e')),
-        );
-      }
-    }
-  }
-
-  Future<Uint8List> _createTestPdf() async {
-    final pdf = sf.PdfDocument();
-    final page = pdf.pages.add();
-
-    page.graphics.drawString(
-      'Test PDF - ${DateTime.now()}',
-      sf.PdfStandardFont(sf.PdfFontFamily.helvetica, 30),
-      bounds: const Rect.fromLTWH(50, 100, 400, 50),
-    );
-
-    final bytes = await pdf.save();
-    pdf.dispose();
-    return Uint8List.fromList(bytes);
-  }
-
   Future<void> _downloadAndOpenPdf(FtpFile file) async {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
+    final credentials = ref.watch(activeFtpCredentialsProvider); // ✅ YENİ
 
     bool internetVar = await hasInternet();
 
-    // ✅ İnternet yoksa işlemi sonlandır
     if (internetVar == false) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           content: Row(
             children: [
-              Icon(
-                Icons.wifi_off,
-                color: Colors.white,
-              ),
+              Icon(Icons.wifi_off, color: Colors.white),
               SizedBox(width: 8),
               Text('İnternet bağlantınızı kontrol ediniz'),
             ],
@@ -823,14 +980,14 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           duration: Duration(seconds: 2),
         ),
       );
-      return; // ✅ İşlemi sonlandır
+      return;
     }
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => WillPopScope(
-        onWillPop: () async => false, // Geri tuşunu engelle
+        onWillPop: () async => false,
         child: AlertDialog(
           content: Row(
             mainAxisSize: MainAxisSize.min,
@@ -858,10 +1015,20 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     );
 
     try {
+      // ✅ YENİ: activeFtpCredentialsProvider'dan al
+      final username = credentials?['username'] ?? '';
+      final password = credentials?['password'] ?? '';
+
+      if (username.isEmpty || password.isEmpty) {
+        Navigator.pop(context);
+        await _showCredentialsDialog();
+        return;
+      }
+
       final loader = FtpPdfLoaderService(
         host: selectedFtpConnection?.host ?? "",
-        username: selectedFtpConnection?.uname ?? "",
-        password: selectedFtpConnection?.pass ?? "",
+        username: username, // ✅ Güncel credentials
+        password: password, // ✅ Güncel credentials
         filePath: file.path,
         port: selectedFtpConnection?.port ?? 21,
       );
@@ -876,7 +1043,8 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfSignScreen(),
+            builder: (context) =>
+                PdfSignScreen(fileDirectory: _currentDirectory),
           ),
         );
 
@@ -895,31 +1063,38 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
       if (context.mounted) {
         Navigator.pop(context);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('PDF yüklenemedi: ${file.name}'),
-                const SizedBox(height: 4),
-                Text(
-                  'Hata: $e',
-                  style: TextStyle(fontSize: 12),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+        if (e.toString().toLowerCase().contains('authentication') ||
+            e.toString().toLowerCase().contains('login') ||
+            e.toString().toLowerCase().contains('credential')) {
+          await _showCredentialsDialog();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('PDF yüklenemedi: ${file.name}'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Hata: $e',
+                    style: TextStyle(fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'Tekrar Dene',
+                textColor: Colors.white,
+                onPressed: () => _downloadAndOpenPdf(file),
+              ),
             ),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 6),
-            action: SnackBarAction(
-              label: 'Tekrar Dene',
-              textColor: Colors.white,
-              onPressed: () => _downloadAndOpenPdf(file),
-            ),
-          ),
-        );
+          );
+        }
       }
     }
   }

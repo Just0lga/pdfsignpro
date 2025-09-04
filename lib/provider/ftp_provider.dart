@@ -1,3 +1,5 @@
+// ftp_provider.dart güncellemesi
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/services/auth_service.dart';
 import '../models/backend_models/perm.dart';
@@ -7,7 +9,29 @@ import '../models/frontend_models/ftp_file.dart';
 
 // Aktif FTP bağlantısı seçici provider
 final selectedFtpConnectionProvider = StateProvider<Perm?>((ref) {
-  return null; // Varsayılan olarak hiçbir sunucu seçili değil
+  return null;
+});
+
+// ✅ YENİ: Geçici credentials provider
+final temporaryFtpCredentialsProvider =
+    StateProvider<Map<String, String>?>((ref) {
+  return null; // {username: ..., password: ...}
+});
+
+// ✅ YENİ: Birleştirilmiş FTP credentials provider
+final activeFtpCredentialsProvider = Provider<Map<String, String>?>((ref) {
+  final selectedConnection = ref.watch(selectedFtpConnectionProvider);
+  final tempCredentials = ref.watch(temporaryFtpCredentialsProvider);
+
+  if (selectedConnection == null) return null;
+
+  // Geçici credentials varsa onları kullan, yoksa connection'daki bilgileri kullan
+  return {
+    'host': selectedConnection.host ?? '',
+    'port': (selectedConnection.port ?? 21).toString(),
+    'username': tempCredentials?['username'] ?? selectedConnection.uname ?? '',
+    'password': tempCredentials?['password'] ?? selectedConnection.pass ?? '',
+  };
 });
 
 // Tüm FTP izinleri (dolu olsun olmasın) - seçim ekranı için
@@ -29,22 +53,22 @@ final ftpPermissionsProvider = Provider<List<Perm>>((ref) {
 
 // FTP dosyaları provider - seçili bağlantıya göre
 final ftpFilesProvider = FutureProvider<List<FtpFile>>((ref) async {
-  final selectedConnection = ref.watch(selectedFtpConnectionProvider);
+  final credentials = ref.watch(activeFtpCredentialsProvider);
 
-  if (selectedConnection == null ||
-      selectedConnection.host == null ||
-      selectedConnection.uname == null ||
-      selectedConnection.pass == null) {
+  if (credentials == null ||
+      credentials['host']!.isEmpty ||
+      credentials['username']!.isEmpty ||
+      credentials['password']!.isEmpty) {
     return [];
   }
 
   try {
     return await FtpPdfLoaderService.listPdfFiles(
-      host: selectedConnection.host!,
-      username: selectedConnection.uname!,
-      password: selectedConnection.pass!,
+      host: credentials['host']!,
+      username: credentials['username']!,
+      password: credentials['password']!,
       directory: '/',
-      port: selectedConnection.port ?? 21,
+      port: int.tryParse(credentials['port']!) ?? 21,
     );
   } catch (e) {
     print('FTP dosya listesi hatası: $e');
@@ -55,6 +79,7 @@ final ftpFilesProvider = FutureProvider<List<FtpFile>>((ref) async {
 // FTP bağlantı durumu provider
 final ftpConnectionStatusProvider = Provider<FtpConnectionStatus>((ref) {
   final selectedConnection = ref.watch(selectedFtpConnectionProvider);
+  final credentials = ref.watch(activeFtpCredentialsProvider);
   final authState = ref.watch(authProvider);
 
   if (!authState.isLoggedIn) {
@@ -65,9 +90,9 @@ final ftpConnectionStatusProvider = Provider<FtpConnectionStatus>((ref) {
     return FtpConnectionStatus.noPermission;
   }
 
-  if (selectedConnection.host == null ||
-      selectedConnection.uname == null ||
-      selectedConnection.pass == null) {
+  if (credentials == null ||
+      credentials['username']!.isEmpty ||
+      credentials['password']!.isEmpty) {
     return FtpConnectionStatus.incompleteConfig;
   }
 
@@ -77,18 +102,19 @@ final ftpConnectionStatusProvider = Provider<FtpConnectionStatus>((ref) {
 // FTP bağlantı durumu enum
 enum FtpConnectionStatus { notLoggedIn, noPermission, incompleteConfig, ready }
 
-// FTP bağlantı detayları provider
+// FTP bağlantı detayları provider - ✅ GÜNCELLENDİ
 final ftpConnectionDetailsProvider = Provider<FtpConnectionDetails?>((ref) {
   final selectedConnection = ref.watch(selectedFtpConnectionProvider);
+  final credentials = ref.watch(activeFtpCredentialsProvider);
 
-  if (selectedConnection == null) return null;
+  if (selectedConnection == null || credentials == null) return null;
 
   return FtpConnectionDetails(
     name: selectedConnection.name,
-    host: selectedConnection.host ?? '',
-    username: selectedConnection.uname ?? '',
-    password: selectedConnection.pass ?? '',
-    port: FtpConnectionDetails._parsePort(selectedConnection.port),
+    host: credentials['host']!,
+    username: credentials['username']!,
+    password: credentials['password']!,
+    port: int.tryParse(credentials['port']!) ?? 21,
     encoding: selectedConnection.encoding,
     isPassiveMode: selectedConnection.passiveMode ?? false,
   );
