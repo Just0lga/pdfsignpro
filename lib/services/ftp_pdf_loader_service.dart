@@ -309,7 +309,7 @@ class FtpPdfLoaderService implements PdfLoaderService {
     return entryType == FTPEntryType.DIR;
   }
 
-  /// Güncellenmiş listAllFiles metodu
+  /// Güncellenmiş listAllFiles metodu - Türkçe klasör desteği ile
   static Future<List<FtpFile>> listAllFiles({
     required String host,
     required String username,
@@ -320,6 +320,7 @@ class FtpPdfLoaderService implements PdfLoaderService {
     FTPConnect? ftpConnect;
     try {
       print('🔗 FTP tüm içerik listesi başlatılıyor...');
+      print('📁 Hedef directory: "$directory"');
 
       ftpConnect = FTPConnect(
         host,
@@ -335,11 +336,88 @@ class FtpPdfLoaderService implements PdfLoaderService {
         throw Exception('FTP bağlantısı kurulamadı');
       }
 
-      if (directory != '/') {
-        await ftpConnect.changeDirectory(directory);
+      // ✅ YENİ: Directory değişimi - parça parça yapılıyor
+      if (directory != '/' && directory.isNotEmpty) {
+        try {
+          // Önce root'a git
+          await ftpConnect.changeDirectory('/');
+
+          // Path'i parçalara ayır
+          List<String> pathParts =
+              directory.split('/').where((s) => s.isNotEmpty).toList();
+          String currentPath = '/';
+
+          // Her klasöre sırayla gir
+          for (String part in pathParts) {
+            print('📁 Alt klasöre giriliyor: "$part"');
+
+            // Önce listeleme yap ve doğru klasör adını bul
+            List<FTPEntry> entries = await ftpConnect.listDirectoryContent();
+            String? actualFolderName;
+
+            // Klasör adının farklı varyantlarını kontrol et
+            for (FTPEntry entry in entries) {
+              if (entry.type == FTPEntryType.DIR) {
+                // Tam eşleşme kontrolü
+                if (entry.name == part) {
+                  actualFolderName = entry.name;
+                  break;
+                }
+
+                // Decoded versiyonla karşılaştır
+                String decodedEntryName =
+                    TurkishCharacterDecoder.decodeFileName(entry.name);
+                String decodedPart =
+                    TurkishCharacterDecoder.decodeFileName(part);
+
+                if (decodedEntryName == decodedPart ||
+                    entry.name.toLowerCase() == part.toLowerCase() ||
+                    decodedEntryName.toLowerCase() ==
+                        decodedPart.toLowerCase()) {
+                  actualFolderName = entry.name;
+                  print(
+                      '   🔄 Eşleşen klasör bulundu: "$actualFolderName" (aranan: "$part")');
+                  break;
+                }
+              }
+            }
+
+            if (actualFolderName != null) {
+              // Bulunan gerçek klasör adıyla dizin değiştir
+              await ftpConnect.changeDirectory(actualFolderName);
+              currentPath = currentPath == '/'
+                  ? '/$actualFolderName'
+                  : '$currentPath/$actualFolderName';
+              print('   ✅ Klasöre girildi: "$actualFolderName"');
+            } else {
+              throw Exception('Klasör bulunamadı: $part');
+            }
+          }
+
+          print('✅ Hedef dizine ulaşıldı: $currentPath');
+        } catch (e) {
+          print('❌ Directory değiştirme hatası: $e');
+
+          // Hata durumunda root'a dön
+          try {
+            await ftpConnect.changeDirectory('/');
+            print('⚠️ Root dizine dönüldü');
+            directory = '/';
+          } catch (e2) {
+            print('❌ Root\'a dönme hatası: $e2');
+          }
+        }
       }
 
       await ftpConnect.setTransferType(TransferType.binary);
+
+      // Mevcut dizini kontrol et (debug için)
+      try {
+        String currentDir = await ftpConnect.currentDirectory();
+        print('📍 Mevcut dizin: "$currentDir"');
+      } catch (e) {
+        print('⚠️ Mevcut dizin alınamadı');
+      }
 
       List<FTPEntry> entries = await ftpConnect.listDirectoryContent();
       List<FtpFile> allItems = [];
@@ -347,24 +425,44 @@ class FtpPdfLoaderService implements PdfLoaderService {
       print('📦 Toplam ${entries.length} item bulundu');
 
       for (FTPEntry entry in entries) {
-        String fullPath =
-            directory == '/' ? '/${entry.name}' : '$directory/${entry.name}';
+        // Skip . and .. entries
+        if (entry.name == '.' || entry.name == '..') {
+          continue;
+        }
+
+        // Path oluşturma - mevcut dizinden devam et
+        String fullPath;
         String decodedName = TurkishCharacterDecoder.decodeFileName(entry.name);
+
+        // Mevcut dizin bilgisini kullan
+        try {
+          String currentDir = await ftpConnect.currentDirectory();
+          if (currentDir == '/') {
+            fullPath = '/${entry.name}';
+          } else {
+            fullPath = '$currentDir/${entry.name}';
+          }
+        } catch (e) {
+          // Fallback
+          if (directory == '/') {
+            fullPath = '/${entry.name}';
+          } else {
+            fullPath = '$directory/${entry.name}';
+          }
+        }
 
         bool isDirectory = _isDirectory(entry.type);
 
         if (isDirectory) {
-          // Klasör ekleme
           allItems.add(FtpFile(
-            name: decodedName,
-            path: fullPath,
-            size: 0, // Klasörler için boyut 0
+            name: decodedName, // UI için decode edilmiş
+            path: fullPath, // FTP işlemleri için orijinal
+            size: 0,
             modifyTime: entry.modifyTime,
-            isDirectory: true, // FtpFile'a isDirectory field ekle
+            isDirectory: true,
           ));
-          print('📁 Klasör eklendi: "$decodedName"');
+          print('📁 Klasör: "$decodedName" (orijinal: "${entry.name}")');
         } else if (entry.type == FTPEntryType.FILE) {
-          // Dosya ekleme
           int fileSize = FtpFileSizeHelper.getSafeSize(entry);
 
           if (fileSize <= 0) {
@@ -372,24 +470,23 @@ class FtpPdfLoaderService implements PdfLoaderService {
               fileSize = await FtpFileSizeHelper.getFileSize(
                   ftpConnect, entry.name, directory);
             } catch (e) {
-              print('Boyut alma hatası (${entry.name}): $e');
               fileSize = 0;
             }
           }
 
           allItems.add(FtpFile(
-            name: decodedName,
-            path: fullPath,
+            name: decodedName, // UI için decode edilmiş
+            path: fullPath, // İndirme için orijinal
             size: fileSize,
             modifyTime: entry.modifyTime,
             isDirectory: false,
           ));
           print(
-              '📄 Dosya eklendi: "$decodedName" (${FtpFileSizeHelper.formatFileSize(fileSize)})');
+              '📄 Dosya: "$decodedName" (${FtpFileSizeHelper.formatFileSize(fileSize)})');
         }
       }
 
-      print('✅ Toplam ${allItems.length} item listelendi (dosya + klasör)');
+      print('✅ Toplam ${allItems.length} item listelendi');
       return allItems;
     } catch (e, stackTrace) {
       print('❌ FTP içerik listeleme hatası: $e');
@@ -595,7 +692,7 @@ class FtpPdfLoaderService implements PdfLoaderService {
     }
   }
 
-// Yardımcı metodlar
+  // Yardımcı metodlar
   static Future<File> _createTempFileForUpload(Uint8List bytes) async {
     final tempDir = Directory.systemTemp;
     final fileName = 'ftp_upload_${DateTime.now().millisecondsSinceEpoch}.pdf';

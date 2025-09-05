@@ -7,6 +7,7 @@ class FtpFileSizeHelper {
   static Future<int> getFileSize(
       FTPConnect ftpConnect, String originalFileName, String directory) async {
     print('🔍 Boyut alma işlemi başlıyor: "$originalFileName"');
+    print('🔍 Boyut alma işlemi başlıyor: "$directory"');
 
     // SIZE komutu ile farklı encoding'leri dene (daha hızlı)
     List<String> variants =

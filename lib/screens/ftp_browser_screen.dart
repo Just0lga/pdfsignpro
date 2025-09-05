@@ -1,3 +1,5 @@
+import 'dart:math' as Math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfsignpro/helpers/has_internet.dart';
@@ -7,10 +9,12 @@ import 'package:pdfsignpro/screens/pdf_sign_screen.dart';
 import 'package:pdfsignpro/screens/pdf_source_selection_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:pdfsignpro/widgets/user_pass_request_dialog.dart';
 import '../models/frontend_models/ftp_file.dart';
 import '../services/ftp_pdf_loader_service.dart';
+import '../turkish.dart';
 
 // Updated FTP Browser Screen
 class FtpBrowserScreen extends ConsumerStatefulWidget {
@@ -29,7 +33,11 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
   // Folder navigation için
   String _currentDirectory = '/';
+  String _currentOriginalDirectory = '/'; // ✅ YENİ: Orijinal encoded path
   List<String> _directoryHistory = ['/'];
+  List<String> _originalDirectoryHistory = [
+    '/'
+  ]; // ✅ YENİ: Orijinal path history
 
   // Geçici credentials
   String? _tempUsername;
@@ -41,7 +49,9 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   void initState() {
     if (widget.fileDirectory != null) {
       _directoryHistory[0] = widget.fileDirectory!;
+      _originalDirectoryHistory[0] = widget.fileDirectory!;
       _currentDirectory = widget.fileDirectory!;
+      _currentOriginalDirectory = widget.fileDirectory!;
     }
     print("XXX ftp_browser_screen.dart");
     super.initState();
@@ -239,9 +249,8 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   // FTP dosyalarını yükle - credentials ile
   Future<void> _loadFtpFiles() async {
     final selectedFtpConnection = ref.watch(selectedFtpConnectionProvider);
-    final credentials = ref.watch(activeFtpCredentialsProvider); // ✅ YENİ
+    final credentials = ref.watch(activeFtpCredentialsProvider);
 
-    // ✅ Artık activeFtpCredentialsProvider'dan al
     final username = credentials?['username'] ?? '';
     final password = credentials?['password'] ?? '';
 
@@ -255,14 +264,17 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
 
     try {
       print('🔄 FTP dosya listesi yükleniyor...');
-      print('📁 Mevcut dizin: $_currentDirectory');
+      print('📁 UI Dizin (decoded): $_currentDirectory');
+      print(
+          '📁 FTP Dizin (orijinal/encoded): $_currentOriginalDirectory'); // ✅ Bu orijinal path olmalı
       print('👤 Kullanıcı: $username');
 
+      // ✅ DOĞRU: Orijinal encoded path'i kullan
       _ftpFilesFuture = FtpPdfLoaderService.listAllFiles(
         host: selectedFtpConnection?.host ?? "",
-        username: username, // ✅ Güncel credentials
-        password: password, // ✅ Güncel credentials
-        directory: _currentDirectory,
+        username: username,
+        password: password,
+        directory: _currentOriginalDirectory, // ✅ Orijinal encoded path
         port: selectedFtpConnection?.port ?? 21,
       );
 
@@ -296,30 +308,73 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     if (!directory.isDirectory) return;
 
     setState(() {
-      _currentDirectory = directory.path;
-      if (!_directoryHistory.contains(directory.path)) {
-        _directoryHistory.add(directory.path);
+      // ✅ ÖNEMLİ: Orijinal encoded path'i OLDUĞU GİBİ sakla
+      _currentOriginalDirectory =
+          directory.path; // Bu zaten orijinal encoded path
+
+      // UI için decode edilmiş path oluştur
+      String decodedPath = directory.path;
+      if (decodedPath.contains('/')) {
+        List<String> pathParts = decodedPath.split('/');
+        List<String> decodedParts = [];
+
+        for (String part in pathParts) {
+          if (part.isNotEmpty) {
+            String decodedPart = TurkishCharacterDecoder.decodeFileName(part);
+            decodedParts.add(decodedPart);
+          }
+        }
+
+        _currentDirectory =
+            decodedParts.isEmpty ? '/' : '/' + decodedParts.join('/');
+      } else {
+        _currentDirectory = TurkishCharacterDecoder.decodeFileName(decodedPath);
       }
+
+      // Her iki history'yi de güncelle
+      if (!_directoryHistory.contains(_currentDirectory)) {
+        _directoryHistory.add(_currentDirectory);
+        _originalDirectoryHistory
+            .add(_currentOriginalDirectory); // Orijinal path'i sakla
+      }
+
+      print('📁 Navigasyon:');
+      print('   FTP Path (orijinal): ${directory.path}');
+      print('   UI Path (decoded): $_currentDirectory');
+      print('   Saklanacak orijinal: $_currentOriginalDirectory');
     });
+
     _checkConnectionAndList();
   }
 
   void _goBack() {
     if (_currentDirectory != '/' && _directoryHistory.length > 1) {
       _directoryHistory.removeLast();
+      _originalDirectoryHistory.removeLast();
       setState(() {
         _currentDirectory = _directoryHistory.last;
+        _currentOriginalDirectory = _originalDirectoryHistory.last;
       });
       _checkConnectionAndList();
     } else if (_currentDirectory != '/') {
       // Fallback: parent directory'ye git
       String parentDir =
           _currentDirectory.substring(0, _currentDirectory.lastIndexOf('/'));
+      String originalParentDir = _currentOriginalDirectory.substring(
+          0, _currentOriginalDirectory.lastIndexOf('/'));
+
       if (parentDir.isEmpty) parentDir = '/';
+      if (originalParentDir.isEmpty) originalParentDir = '/';
+
       setState(() {
         _currentDirectory = parentDir;
+        _currentOriginalDirectory = originalParentDir;
         _directoryHistory = ['/'];
-        if (parentDir != '/') _directoryHistory.add(parentDir);
+        _originalDirectoryHistory = ['/'];
+        if (parentDir != '/') {
+          _directoryHistory.add(parentDir);
+          _originalDirectoryHistory.add(originalParentDir);
+        }
       });
       _checkConnectionAndList();
     }
@@ -328,8 +383,16 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
   // Breadcrumb navigation widget
   Widget _buildBreadcrumbNavigation() {
     print("OOO $_currentDirectory");
+
+    // UI için decoded path parçaları
     List<String> pathParts =
         _currentDirectory.split('/').where((s) => s.isNotEmpty).toList();
+
+    // Orijinal path parçaları (FTP için)
+    List<String> originalPathParts = _currentOriginalDirectory
+        .split('/')
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -339,7 +402,9 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
             onTap: () {
               setState(() {
                 _currentDirectory = '/';
+                _currentOriginalDirectory = '/';
                 _directoryHistory = ['/'];
+                _originalDirectoryHistory = ['/'];
               });
               _checkConnectionAndList();
             },
@@ -349,38 +414,68 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
           ),
           ...pathParts.asMap().entries.map((entry) {
             int index = entry.key;
-            String part = entry.value;
+            String displayPart = entry.value; // Already decoded for display
 
             return Row(
               children: [
+                Text(" / ", style: TextStyle(color: Colors.white)),
                 GestureDetector(
                   onTap: () {
+                    // UI için decoded path
                     String targetPath =
                         '/' + pathParts.sublist(0, index + 1).join('/');
+
+                    // FTP için orijinal path - originalPathParts'tan al
+                    String originalTargetPath = originalPathParts.isEmpty
+                        ? '/'
+                        : '/' +
+                            originalPathParts
+                                .sublist(
+                                    0,
+                                    Math.min(
+                                        index + 1, originalPathParts.length))
+                                .join('/');
+
                     setState(() {
                       _currentDirectory = targetPath;
-                      _directoryHistory = _directoryHistory
-                          .where((path) =>
-                              targetPath.startsWith(path) || path == '/')
-                          .toList();
+                      _currentOriginalDirectory = originalTargetPath;
+
+                      // History güncelleme
+                      int historyIndex = _directoryHistory.indexOf(targetPath);
+                      if (historyIndex != -1) {
+                        _directoryHistory =
+                            _directoryHistory.sublist(0, historyIndex + 1);
+                        _originalDirectoryHistory = _originalDirectoryHistory
+                            .sublist(0, historyIndex + 1);
+                      } else {
+                        _directoryHistory.add(targetPath);
+                        _originalDirectoryHistory.add(originalTargetPath);
+                      }
                     });
+
+                    print('📍 Breadcrumb tıklandı:');
+                    print('   UI Path: $targetPath');
+                    print('   FTP Path: $originalTargetPath');
+
                     _checkConnectionAndList();
                   },
-                  child: Text("",
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    displayPart,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             );
-          }),
+          }).toList(),
         ],
       ),
     );
   }
 
-  // Dosyaları tarihe göre sırala (klasörler önce)
+// Dosyaları tarihe göre sırala (klasörler önce)
   List<FtpFile> _sortFilesByDate(List<FtpFile> files) {
     final sortedFiles = List<FtpFile>.from(files);
 
@@ -564,6 +659,18 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
     // ✅ Güncel username'i göster
     final displayUsername = credentials?['username'] ?? 'Belirtilmemiş';
 
+    // Dizin adını decode et
+    String displayDirectory = _currentDirectory;
+    if (_currentDirectory.contains('/')) {
+      List<String> parts = _currentDirectory.split('/');
+      List<String> decodedParts = parts
+          .map((part) => part.isEmpty
+              ? part
+              : TurkishCharacterDecoder.decodeFileName(part))
+          .toList();
+      displayDirectory = decodedParts.join('/');
+    }
+
     return Container(
       color: Color(0xFF112b66).withOpacity(0.1),
       padding: const EdgeInsets.all(12),
@@ -614,7 +721,7 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Dizin: $_currentDirectory',
+                  'Dizin: $displayDirectory', // Decode edilmiş dizin adı
                   style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFF112b66),
@@ -962,8 +1069,9 @@ class _FtpBrowserScreenState extends ConsumerState<FtpBrowserScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                PdfSignScreen(fileDirectory: _currentDirectory),
+            builder: (context) => PdfSignScreen(
+                fileDirectory:
+                    _currentOriginalDirectory), // ✅ Orijinal directory
           ),
         );
 
