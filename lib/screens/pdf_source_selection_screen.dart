@@ -770,12 +770,85 @@ class _PdfSourceSelectionScreenState
           ),
           content: Text('Uygulamadan çıkmak istediğinizden emin misiniz?'),
           actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        "İptal",
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      ref
+                          .read(authProvider.notifier)
+                          .logout(clearRememberMe: true);
+                      ref.read(pdfProvider.notifier).reset();
+                      ref.read(selectedFtpConnectionProvider.notifier).state =
+                          null;
+
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (context) => LoginScreen()),
+                        (Route<dynamic> route) =>
+                            false, // tüm eski route’ları sil
+                      );
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          content: Row(
+                            children: [
+                              Icon(
+                                Icons.logout,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 8),
+                              Text('Tamamen çıkış yapıldı'),
+                            ],
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        "Çıkış yap",
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                )
+              ],
+            ),
+            /*
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                'İptal',
+                'Çıkış Yap',
                 style:
-                    TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                    TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
               ),
             ),
             TextButton(
@@ -812,7 +885,7 @@ class _PdfSourceSelectionScreenState
                 style:
                     TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
               ),
-            ),
+            ),*/
           ],
         ),
       ),

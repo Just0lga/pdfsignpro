@@ -167,30 +167,88 @@ class _UserPassRequestDialogState extends ConsumerState<UserPassRequestDialog> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed:
-                _isConnecting ? null : () => Navigator.pop(context, null),
-            child: Text(
-              'İptal',
-              style: TextStyle(
-                color: _isConnecting ? Colors.grey : Colors.black,
-                fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Expanded(
+                  child: GestureDetector(
+                onTap:
+                    _isConnecting ? null : () => Navigator.pop(context, null),
+                child: Container(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      color: _isConnecting ? Colors.grey.shade300 : Colors.red,
+                      borderRadius: BorderRadius.circular(5)),
+                  child: Text(
+                    "Çıkış Yap",
+                    style: TextStyle(
+                        color: _isConnecting ? Colors.grey : Colors.white,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              )),
+              SizedBox(
+                width: 8,
               ),
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: _isConnecting ? null : testConnectionAndSave,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF112b66),
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade300,
-            ),
-            icon: Icon(_isConnecting ? Icons.hourglass_empty : Icons.check),
-            label: Text(
-              _isConnecting ? 'Test Ediliyor...' : 'Bağlan',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+              Expanded(
+                  child: GestureDetector(
+                onTap: _isConnecting ? null : testConnectionAndSave,
+                child: Container(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      color: _isConnecting
+                          ? Colors.grey.shade300
+                          : Color(0xFF112b66),
+                      borderRadius: BorderRadius.circular(5)),
+                  child: Text(
+                    _isConnecting ? 'Test Ediliyor...' : 'Bağlan',
+                    style: TextStyle(
+                        color: _isConnecting ? Colors.grey : Colors.white,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              )),
+              /*
+              Expanded(
+                flex: 4,
+                child: TextButton(
+                  onPressed:
+                      _isConnecting ? null : () => Navigator.pop(context, null),
+                  style: TextButton.styleFrom(
+                      backgroundColor:
+                          _isConnecting ? Colors.grey.shade300 : Colors.red),
+                  child: Text(
+                    'İptal',
+                    style: TextStyle(
+                      color: _isConnecting ? Colors.grey : Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 8,
+              ),
+              Expanded(
+                flex: 4,
+                child: ElevatedButton.icon(
+                  onPressed: _isConnecting ? null : testConnectionAndSave,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF112b66),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade300,
+                  ),
+                  icon:
+                      Icon(_isConnecting ? Icons.hourglass_empty : Icons.check),
+                  label: Text(
+                    _isConnecting ? 'Test Ediliyor...' : 'Bağlan',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),*/
+            ],
+          )
         ],
       ),
     );

@@ -69,7 +69,7 @@ class PdfSignScreen extends ConsumerWidget {
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: Colors.grey.shade300,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(5),
                   ),
                   elevation: 2,
                 ),
@@ -303,6 +303,7 @@ class PdfSignScreen extends ConsumerWidget {
             connectionDetails.username, // ✅ Doğrudan connectionDetails'dan
         password:
             connectionDetails.password, // ✅ Doğrudan connectionDetails'dan
+        directory: fileDirectory,
         port: connectionDetails.port,
       );
 
@@ -329,21 +330,46 @@ class PdfSignScreen extends ConsumerWidget {
                   content: Text(
                       '$fileName zaten mevcut. Üstüne yazmak istiyor musunuz?'),
                   actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text(
-                        'İptal',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.black),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text(
-                        'Üstüne Yaz',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.red),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                            child: GestureDetector(
+                          onTap: () => Navigator.pop(context, false),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(5)),
+                            child: Text(
+                              "İptal",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        )),
+                        SizedBox(
+                          width: 4,
+                        ),
+                        Expanded(
+                            child: GestureDetector(
+                          onTap: () => Navigator.pop(context, true),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(5)),
+                            child: Text(
+                              "Üstüne yaz",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        )),
+                      ],
                     ),
                   ],
                 ),

@@ -402,7 +402,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   shadowColor:
                                       Color(0xFF112b66).withOpacity(0.4),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(5),
                                   ),
                                 ),
                                 child: authState.isLoading

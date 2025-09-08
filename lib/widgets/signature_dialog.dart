@@ -78,95 +78,97 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                        backgroundColor: Colors.red.withOpacity(0.5)),
-                    onPressed: () {
-                      _controller.clear();
-                      notifier.clearSignature(_key);
-                      Navigator.pop(context);
-                    },
-                    child: FittedBox(
-                      child: const Text(
-                        'Temizle',
-                        style: TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.bold),
-                      ),
+                    child: GestureDetector(
+                  onTap: () {
+                    _controller.clear();
+                    notifier.clearSignature(_key);
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(5)),
+                    child: Text(
+                      "Temizle",
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
-                SizedBox(
-                  width: 8,
-                ),
+                )),
+                SizedBox(width: 4),
                 Expanded(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                        backgroundColor: Colors.black.withOpacity(0.2)),
-                    onPressed: () => Navigator.pop(context),
-                    child: FittedBox(
-                      child: const Text(
-                        'İptal',
-                        style: TextStyle(
-                            color: Colors.black, fontWeight: FontWeight.bold),
-                      ),
+                    child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(5)),
+                    child: Text(
+                      "İptal",
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
+                )),
                 SizedBox(
-                  width: 8,
+                  width: 4,
                 ),
+                // İki
                 Expanded(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                        backgroundColor: Colors.green.withOpacity(0.3)),
-                    onPressed: () async {
-                      final signature = await _controller.toPngBytes();
-                      if (signature != null) {
-                        notifier.updateSignature(_key, signature);
-                      }
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                    child: FittedBox(
-                      child: const Text(
-                        'Kaydet',
-                        style: TextStyle(
-                            color: Colors.green, fontWeight: FontWeight.bold),
-                      ),
+                    child: GestureDetector(
+                  onTap: () async {
+                    final signature = await _controller.toPngBytes();
+                    if (signature != null) {
+                      notifier.updateSignature(_key, signature);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(5)),
+                    child: Text(
+                      "Kaydet",
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
+                )),
               ],
             ),
-            SizedBox(
-              height: 8,
-            ),
+            SizedBox(height: 8),
             // İkinci satır - Tüm sayfalara ekle butonu
-            Container(
-              width: double.infinity,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                    backgroundColor: Colors.green.withOpacity(0.3)),
-                onPressed: () async {
-                  final signature = await _controller.toPngBytes();
-                  if (signature != null) {
-                    // Tüm sayfalardaki aynı pozisyona imza ekle
-                    for (int pageIndex = 0;
-                        pageIndex < state.totalPages;
-                        pageIndex++) {
-                      final newKey = '${pageIndex}_${widget.signatureIndex}';
-                      notifier.updateSignature(newKey, signature);
-                    }
+            GestureDetector(
+              onTap: () async {
+                final signature = await _controller.toPngBytes();
+                if (signature != null) {
+                  // Tüm sayfalardaki aynı pozisyona imza ekle
+                  for (int pageIndex = 0;
+                      pageIndex < state.totalPages;
+                      pageIndex++) {
+                    final newKey = '${pageIndex}_${widget.signatureIndex}';
+                    notifier.updateSignature(newKey, signature);
                   }
-                  if (context.mounted) Navigator.pop(context);
-                },
-                child: FittedBox(
-                  child: const Text(
-                    "Bu imzayı bütün sayfalara ekle",
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                }
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: Container(
+                width: double.infinity,
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(5)),
+                child: Text(
+                  "Bu imzayı bütün sayfalara ekle",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ),

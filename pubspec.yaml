@@ -29,8 +29,7 @@ dependencies:
   shared_preferences: ^2.5.3
   connectivity_plus: ^5.0.2
   crypto: ^3.0.3
-
-
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
