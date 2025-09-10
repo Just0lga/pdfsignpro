@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdfsignpro/models/frontend_models/ftp_file.dart';
 import 'package:pdfsignpro/models/frontend_models/pdf_state.dart';
 import 'package:pdfsignpro/provider/pdf_provider.dart';
 import 'package:pdfsignpro/provider/ftp_provider.dart';
@@ -108,6 +109,8 @@ class PdfSignScreen extends ConsumerWidget {
 
   List<Widget>? _buildActions(BuildContext context, PdfState state,
       PdfNotifier notifier, WidgetRef ref) {
+    final pdfState = ref.watch(pdfProvider);
+
     if (state.isLoading) {
       return [_buildLoadingIndicator()];
     }
@@ -118,11 +121,13 @@ class PdfSignScreen extends ConsumerWidget {
         onPressed: () => _sharePDF(context, notifier),
         tooltip: 'Paylaş',
       ),
-      IconButton(
-        icon: const Icon(Icons.save),
-        onPressed: () => _savePDF(context, notifier, ref),
-        tooltip: 'Kaydet',
-      ),
+      pdfState.signatures.isEmpty
+          ? SizedBox()
+          : IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: () => _savePDF(context, notifier, ref),
+              tooltip: 'Kaydet',
+            ),
     ];
   }
 
@@ -241,17 +246,11 @@ class PdfSignScreen extends ConsumerWidget {
       ),
     );
   }
-
-// pdf_sign_screen.dart'tan güncellenmesi gereken _savePDF metodu:
+// _savePDF metodundaki dosya kontrol kısmını bu kodla değiştirin:
 
   Future<void> _savePDF(
       BuildContext context, PdfNotifier notifier, WidgetRef ref) async {
     final connectionDetails = ref.read(ftpConnectionDetailsProvider);
-
-    // ✅ KALDIRILIYOR - Artık SharedPreferences'a gerek yok
-    // final prefs = await SharedPreferences.getInstance();
-    // String? username = prefs.getString("${connectionDetails}username");
-    // String? password = prefs.getString("${connectionDetails}pass");
 
     // Loading göster
     showDialog(
@@ -277,7 +276,6 @@ class PdfSignScreen extends ConsumerWidget {
       final Uint8List signedPdfBytes = result['bytes'];
       final String fileName = '${result['fileName']}.pdf';
 
-      // ✅ YENİ: connectionDetails artık güncel credentials içeriyor
       if (connectionDetails == null ||
           connectionDetails.username.isEmpty ||
           connectionDetails.password.isEmpty) {
@@ -296,24 +294,23 @@ class PdfSignScreen extends ConsumerWidget {
         return;
       }
 
-      // Dosya var mı kontrol et
+      // Dosyaları listele
       final existingFiles = await FtpPdfLoaderService.listPdfFiles(
         host: connectionDetails.host,
-        username:
-            connectionDetails.username, // ✅ Doğrudan connectionDetails'dan
-        password:
-            connectionDetails.password, // ✅ Doğrudan connectionDetails'dan
+        username: connectionDetails.username,
+        password: connectionDetails.password,
         directory: fileDirectory,
         port: connectionDetails.port,
       );
 
-      final fileExists = existingFiles.any((file) => file.name == fileName);
+      // GELİŞMİŞ ÇAKIŞMA KONTROLÜ
+      final conflictInfo = _checkFileConflict(fileName, existingFiles);
       bool shouldOverwrite = true;
 
       if (context.mounted) Navigator.pop(context);
 
-      // Dosya varsa onay iste
-      if (fileExists && context.mounted) {
+      // Çakışma varsa onay iste
+      if (conflictInfo['hasConflict'] && context.mounted) {
         shouldOverwrite = await showDialog<bool>(
               barrierDismissible: false,
               context: context,
@@ -324,11 +321,40 @@ class PdfSignScreen extends ConsumerWidget {
                 },
                 child: AlertDialog(
                   title: const Text(
-                    'Dosya Mevcut',
+                    'Bilgilendirme',
+                    textAlign: TextAlign.center,
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  content: Text(
-                      '$fileName zaten mevcut. Üstüne yazmak istiyor musunuz?'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Yüklenecek dosya:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text('• $fileName'),
+                      SizedBox(height: 8),
+                      Text(
+                        'İlgili dosyalar:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 4),
+                      ...conflictInfo['conflictingFiles']
+                          .map<Widget>((file) => Padding(
+                                padding: EdgeInsets.only(left: 8),
+                                child: Text('• ${file.name}',
+                                    style: TextStyle(color: Colors.red[700])),
+                              )),
+                      SizedBox(height: 12),
+                      Text(
+                        conflictInfo['message'],
+                        style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange[800]),
+                      ),
+                    ],
+                  ),
                   actions: [
                     Row(
                       children: [
@@ -349,9 +375,7 @@ class PdfSignScreen extends ConsumerWidget {
                             ),
                           ),
                         )),
-                        SizedBox(
-                          width: 4,
-                        ),
+                        SizedBox(width: 4),
                         Expanded(
                             child: GestureDetector(
                           onTap: () => Navigator.pop(context, true),
@@ -359,10 +383,10 @@ class PdfSignScreen extends ConsumerWidget {
                             padding: EdgeInsets.symmetric(vertical: 8),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                                color: Colors.red,
+                                color: Color(0xFF4CAF50),
                                 borderRadius: BorderRadius.circular(5)),
                             child: Text(
-                              "Üstüne yaz",
+                              "Onayla",
                               style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold),
@@ -380,8 +404,9 @@ class PdfSignScreen extends ConsumerWidget {
 
       if (!shouldOverwrite) return;
 
-      // Upload loading
-      if (context.mounted) {
+      // Eğer çakışma varsa, önce çakışan dosyaları sil
+      if (conflictInfo['hasConflict'] && context.mounted) {
+        // Çakışan dosya silme için loading göster
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -393,14 +418,56 @@ class PdfSignScreen extends ConsumerWidget {
                 children: [
                   const CircularProgressIndicator(color: Color(0xFF112b66)),
                   const SizedBox(width: 16),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('FTP\'ye yükleniyor...'),
-                    ],
-                  ),
+                  Text('İmzalı versiyon değiştiriliyor...'),
                 ],
+              ),
+            ),
+          ),
+        );
+
+        bool deleted = await _deleteConflictingFiles(
+          connectionDetails: connectionDetails,
+          conflictingFiles: conflictInfo['conflictingFiles'],
+          directory: fileDirectory,
+          context: context,
+        );
+
+        // Silme işlemi loading'ini kapat
+        if (context.mounted) Navigator.pop(context);
+
+        if (!deleted) {
+          // Silme başarısızsa kullanıcıya mesaj göster ve işlemi iptal et
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    Text("Çakışan dosyalar silinemedi! Yükleme iptal edildi."),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Upload loading - Bu kez daha net mesajla
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => WillPopScope(
+            onWillPop: () async => false,
+            child: PopScope(
+              canPop: false,
+              child: const AlertDialog(
+                content: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFF112b66)),
+                    SizedBox(width: 16),
+                    Text('FTP\'ye yükleniyor...'),
+                  ],
+                ),
               ),
             ),
           ),
@@ -409,8 +476,8 @@ class PdfSignScreen extends ConsumerWidget {
 
       final success = await FtpPdfLoaderService.uploadPdfToFtp(
         host: connectionDetails.host,
-        username: connectionDetails.username, // ✅ Güncel credentials
-        password: connectionDetails.password, // ✅ Güncel credentials
+        username: connectionDetails.username,
+        password: connectionDetails.password,
         pdfBytes: signedPdfBytes,
         fileName: fileName,
         directory: fileDirectory,
@@ -418,6 +485,7 @@ class PdfSignScreen extends ConsumerWidget {
         overwrite: shouldOverwrite,
       );
 
+      // Upload loading'ini kapat
       if (context.mounted) Navigator.pop(context);
 
       if (context.mounted) {
@@ -435,7 +503,6 @@ class PdfSignScreen extends ConsumerWidget {
                         'Bağlantı: ${connectionDetails.name}',
                         style: TextStyle(fontSize: 12),
                       ),
-                      // ✅ YENİ: Hangi kullanıcı ile kaydedildiğini göster
                       Text(
                         'Kullanıcı: ${connectionDetails.username}',
                         style: TextStyle(
@@ -449,6 +516,7 @@ class PdfSignScreen extends ConsumerWidget {
         );
       }
     } catch (e) {
+      // Herhangi bir loading dialog açıksa kapat
       if (context.mounted) Navigator.pop(context);
 
       if (context.mounted) {
@@ -457,13 +525,8 @@ class PdfSignScreen extends ConsumerWidget {
             behavior: SnackBarBehavior.floating,
             content: Row(
               children: [
-                Icon(
-                  Icons.wifi_off,
-                  color: Colors.white,
-                ),
-                SizedBox(
-                  width: 8,
-                ),
+                Icon(Icons.wifi_off, color: Colors.white),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                       'PDF kaydetme hatası: Lütfen tekrar deneyiniz, internetinizi kontrol ediniz'),
@@ -474,6 +537,90 @@ class PdfSignScreen extends ConsumerWidget {
           ),
         );
       }
+    }
+  }
+
+// Yardımcı metod: Dosya çakışma kontrolü
+  Map<String, dynamic> _checkFileConflict(
+      String fileName, List<FtpFile> existingFiles) {
+    // Dosya adından temel adı çıkar (örn: "rapor_imzalandi_123.pdf" -> "rapor")
+    String baseName = _extractBaseName(fileName);
+
+    // Çakışan dosyaları bul
+    List<FtpFile> conflictingFiles = existingFiles.where((file) {
+      String existingBaseName = _extractBaseName(file.name);
+      return existingBaseName == baseName;
+    }).toList();
+
+    bool hasConflict = conflictingFiles.isNotEmpty;
+    String message = '';
+
+    if (hasConflict) {
+      message =
+          "Eğer orijinal dosyaya ait imzalı versiyon varsa üstüne yazılacaktır.";
+    }
+
+    return {
+      'hasConflict': hasConflict,
+      'conflictingFiles': conflictingFiles,
+      'message': message,
+    };
+  }
+
+// Dosya adından temel adı çıkaran metod
+  String _extractBaseName(String fileName) {
+    // .pdf uzantısını kaldır
+    String nameWithoutExt = fileName.toLowerCase().replaceAll('.pdf', '');
+
+    // "_imzalandi" ve sonrasını kaldır
+    if (nameWithoutExt.contains('_imzalandi')) {
+      return nameWithoutExt.split('_imzalandi')[0];
+    }
+
+    return nameWithoutExt;
+  }
+
+// Çakışan dosyaları silen metod
+  Future<bool> _deleteConflictingFiles({
+    required dynamic connectionDetails,
+    required List<FtpFile> conflictingFiles,
+    required String directory,
+    required BuildContext context,
+  }) async {
+    try {
+      print('🗑️ ${conflictingFiles.length} çakışan dosya silme kontrolü...');
+
+      for (FtpFile file in conflictingFiles) {
+        // Orijinal dosya (ör: rapor.pdf) korunacak
+        if (!file.name.toLowerCase().contains('_imzalandi')) {
+          print('   ⏭️ Orijinal dosya korunuyor: ${file.name}');
+          continue;
+        }
+
+        print('   Siliniyor: ${file.name}');
+
+        bool deleted = await FtpPdfLoaderService.deleteFileFromFtp(
+          host: connectionDetails.host,
+          username: connectionDetails.username,
+          password: connectionDetails.password,
+          fileName: file.name,
+          directory: directory,
+          port: connectionDetails.port,
+        );
+
+        if (!deleted) {
+          print('   ❌ Silinemedi: ${file.name}');
+          return false;
+        }
+
+        print('   ✅ Silindi: ${file.name}');
+      }
+
+      print('✅ Çakışan imzalı dosyalar silindi (orijinal korundu)');
+      return true;
+    } catch (e) {
+      print('❌ Çakışan dosya silme hatası: $e');
+      return false;
     }
   }
 

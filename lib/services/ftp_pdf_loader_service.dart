@@ -642,6 +642,112 @@ class FtpPdfLoaderService implements PdfLoaderService {
     }
   }
 
+  /// FTP'den dosya silme
+  static Future<bool> deleteFileFromFtp({
+    required String host,
+    required String username,
+    required String password,
+    required String fileName,
+    required String directory,
+    required int port,
+  }) async {
+    FTPConnect? ftpConnect;
+
+    try {
+      print('🗑️ FTP dosya silme başlıyor: "$fileName"');
+      print('📁 Directory (DECODED): "$directory"');
+
+      ftpConnect = FTPConnect(
+        host,
+        user: username,
+        pass: password,
+        port: port,
+        timeout: 30,
+        showLog: true,
+      );
+
+      bool connected = await ftpConnect.connect();
+      if (!connected) {
+        throw Exception('FTP bağlantısı kurulamadı');
+      }
+
+      // Directory'ye git
+      if (directory != '/' && directory.isNotEmpty) {
+        try {
+          await _changeToDirectory(ftpConnect, directory);
+          print('✅ Directory\'ye geçildi: "$directory"');
+        } catch (e) {
+          print('❌ Directory değiştirme hatası: $e');
+          throw Exception('Directory değiştirme başarısız: $e');
+        }
+      }
+
+      // Dosyayı sil - önce orijinal adla dene
+      bool deleted = false;
+
+      try {
+        print('🗑️ Silme denemesi: "$fileName"');
+        deleted = await ftpConnect.deleteFile(fileName);
+
+        if (deleted) {
+          print('✅ Dosya silindi: "$fileName"');
+          return true;
+        }
+      } catch (e) {
+        print('❌ İlk silme denemesi başarısız: $e');
+      }
+
+      // Orijinal ad başarısız olduysa, encoding varyantlarını dene
+      if (!deleted) {
+        List<String> variants =
+            TurkishCharacterDecoder.generateFtpEncodingVariants(fileName);
+
+        for (String variant in variants) {
+          if (variant == fileName) continue; // Zaten denendi
+
+          try {
+            print('🗑️ Varyant silme denemesi: "$variant"');
+            deleted = await ftpConnect.deleteFile(variant);
+
+            if (deleted) {
+              print('✅ Varyant ile dosya silindi: "$variant"');
+              return true;
+            }
+          } catch (e) {
+            print('❌ Varyant silme başarısız: "$variant" - $e');
+            continue;
+          }
+        }
+      }
+
+      // Son kontrol - dosya gerçekten silinmiş mi?
+      if (deleted) {
+        try {
+          // Dosya boyutunu kontrol et, bulunamayacak
+          await ftpConnect.sizeFile(fileName);
+          print('⚠️ Dosya hala mevcut görünüyor: $fileName');
+          return false;
+        } catch (e) {
+          // Dosya bulunamadı = başarıyla silindi
+          print('✅ Dosya silme doğrulandı: $fileName');
+          return true;
+        }
+      }
+
+      print('❌ Dosya silinemedi: $fileName');
+      return false;
+    } catch (e) {
+      print('❌ FTP dosya silme hatası: $e');
+      return false;
+    } finally {
+      try {
+        await ftpConnect?.disconnect();
+      } catch (e) {
+        print('FTP bağlantı kesme hatası: $e');
+      }
+    }
+  }
+
   // Yardımcı metodlar
   static Future<File> _createTempFileForUpload(Uint8List bytes) async {
     final tempDir = Directory.systemTemp;
